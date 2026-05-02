@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "SMART HAWKER",
+    "slug": "unipro-pos-new",
+    "version": "3.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/smarthawker icon final.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/images/smarthawker icon final.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "experiments": {
+      "turboModules": false
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.unipro.pos"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/smarthawker icon final.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "package": "com.unipro.pos",
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/images/smarthawker icon final.png"
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "984fbd31-a0ce-4d4e-a9e4-09cf244c78e1"
+      }
+    }
+  }
+}
