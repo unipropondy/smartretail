@@ -108,7 +108,7 @@ const PayNowSettings: React.FC<PayNowSettingsProps> = ({
         name: filename || 'paynow-qr.jpg',
         type,
       } as any);
-      const baseURL = 'https://uniprohawker-production.up.railway.app/api';
+      const baseURL = 'https://smartretail-production-5457.up.railway.app/api';
       const token = await AsyncStorage.getItem('token');
       const response = await axios.post(`${baseURL}/upload`, formData, {
         headers: { 
@@ -120,7 +120,7 @@ const PayNowSettings: React.FC<PayNowSettingsProps> = ({
       const imageUrl = response.data.imageUrl || response.data.imageUri;
       const fullImageUrl = imageUrl.startsWith('http') 
         ? imageUrl 
-        : `https://uniprohawker-production.up.railway.app${imageUrl}`;
+        : `https://smartretail-production-5457.up.railway.app${imageUrl}`;
       setQrCodeUrl(fullImageUrl);
       Alert.alert('✅ Success', 'QR code uploaded successfully');
     } catch (error: any) {

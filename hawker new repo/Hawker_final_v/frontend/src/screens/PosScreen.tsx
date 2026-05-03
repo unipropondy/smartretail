@@ -1451,7 +1451,7 @@ const loadDishItems = async (force = false) => {
       console.log('🔍 IsFavourite in response:', response.data[0].IsFavourite);
     }
     
-    const baseURL = 'https://uniprohawker-production.up.railway.app';
+    const baseURL = 'https://smartretail-production-5457.up.railway.app';
     
     const items = (response.data || []).map((item: any) => {
       const newItem = {
@@ -3854,9 +3854,9 @@ const testSunmiConnection = async () => {
         }}
     >
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="business-outline" size={20} color="#fff" />
-            <Text style={[styles.menuItemBtnText, { color: '#fff', marginLeft: 8 }]}>
-                🏪 Manage Departments
+         
+            <Text style={[styles.menuItemBtnText, { color: '#fff', }]}>
+                🏪 Departments
             </Text>
         </View>
     </TouchableOpacity>

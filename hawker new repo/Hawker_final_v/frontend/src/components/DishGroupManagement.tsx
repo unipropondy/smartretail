@@ -582,14 +582,14 @@ useEffect(() => {
             )}
 
             {/* Group Name */}
-            <Text style={[styles.formLabel, { color: currentTheme.textSecondary }]}>Group Name *</Text>
+            <Text style={[styles.formLabel, { color: currentTheme.textSecondary }]}>Category Name *</Text>
             <TextInput
                 style={[styles.formInput, {
                     backgroundColor: currentTheme.surface,
                     borderColor: currentTheme.border,
                     color: currentTheme.text
                 }]}
-                placeholder="Enter group name"
+                placeholder="Enter Category name"
                 placeholderTextColor={currentTheme.textSecondary}
                 value={newGroupName}
                 onChangeText={setNewGroupName}
@@ -696,14 +696,14 @@ useEffect(() => {
             )}
 
             {/* Group Name */}
-            <Text style={[styles.formLabel, { color: currentTheme.textSecondary }]}>Group Name *</Text>
+            <Text style={[styles.formLabel, { color: currentTheme.textSecondary }]}>Category Name *</Text>
             <TextInput
                 style={[styles.formInput, {
                     backgroundColor: currentTheme.surface,
                     borderColor: currentTheme.border,
                     color: currentTheme.text
                 }]}
-                placeholder="Enter group name"
+                placeholder="Enter Category name"
                 placeholderTextColor={currentTheme.textSecondary}
                 value={newGroupName}
                 onChangeText={setNewGroupName}

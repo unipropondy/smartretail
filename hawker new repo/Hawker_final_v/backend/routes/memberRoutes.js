@@ -164,6 +164,7 @@ router.get('/value-cards', authenticateToken, async (req, res) => {
 // CREATE value card - Balance = Service Value only
 // CREATE value card with sequential number
 // CREATE value card with PER OUTLET sequential number
+// CREATE value card with sequential number - FIXED
 router.post('/value-cards', authenticateToken, async (req, res) => {
     try {
         const outletId = await getOutletId(req);
@@ -189,32 +190,40 @@ router.post('/value-cards', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Member not found' });
         }
         
-        // ✅ Get max card number for THIS OUTLET only
+        // ✅ FIXED: Get last card number using STRING comparison (not INT conversion)
         const lastCardResult = await pool.request()
             .input('outletId', sql.Int, outletId)
             .query(`
                 SELECT TOP 1 CardNumber 
                 FROM ValueCards 
                 WHERE OutletId = @outletId 
-                ORDER BY CAST(SUBSTRING(CardNumber, 3, LEN(CardNumber)-2) AS INT) DESC
+                ORDER BY Id DESC
             `);
         
         let nextNumber = 1;
         if (lastCardResult.recordset.length > 0) {
             const lastCard = lastCardResult.recordset[0].CardNumber;
-            // Extract number from VC0001 format
+            // ✅ Extract number using string methods (not CAST to INT)
             const match = lastCard.match(/VC(\d+)/);
             if (match) {
-                nextNumber = parseInt(match[1]) + 1;
+                let num = parseInt(match[1]);
+                if (!isNaN(num)) {
+                    nextNumber = num + 1;
+                }
+            }
+            // ✅ If number is > 9999, reset to 1
+            if (nextNumber > 9999) {
+                nextNumber = 1;
             }
         }
         
-        // Format as VC0001, VC0002, etc. for this outlet
+        // Format as VC0001, VC0002, etc.
         const cardNumber = `VC${nextNumber.toString().padStart(4, '0')}`;
         
         const cardVal = parseFloat(cardValue) || 0;
         const serviceVal = parseFloat(serviceValue) || 0;
         const balance = serviceVal;
+        const totalValue = serviceVal;
         
         const result = await pool.request()
             .input('memberId', sql.Int, memberId)
@@ -222,7 +231,7 @@ router.post('/value-cards', authenticateToken, async (req, res) => {
             .input('cardNumber', sql.NVarChar, cardNumber)
             .input('cardValue', sql.Decimal(10,2), cardVal)
             .input('serviceValue', sql.Decimal(10,2), serviceVal)
-            .input('totalValue', sql.Decimal(10,2), serviceVal)
+            .input('totalValue', sql.Decimal(10,2), totalValue)
             .input('balance', sql.Decimal(10,2), balance)
             .input('notes', sql.NVarChar, notes || '')
             .input('createdBy', sql.Int, req.user.id)

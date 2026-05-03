@@ -392,7 +392,7 @@ useEffect(() => {
 
       const baseURL = __DEV__ 
         ? 'http://192.168.0.169:5000'
-        : 'https://uniprohawker-production.up.railway.app';
+        : 'https://smartretail-production-5457.up.railway.app';
       
       const imagePath = response.data.imageUri || response.data.ImageUrl;
       
@@ -500,7 +500,7 @@ useEffect(() => {
 
       const baseURL = __DEV__ 
         ? 'http://192.168.0.169:5000'
-        : 'https://uniprohawker-production.up.railway.app';
+        : 'https://smartretail-production-5457.up.railway.app';
       
       const imagePath = response.data.imageUri || response.data.ImageUrl;
       
@@ -1384,7 +1384,7 @@ const resetForm = () => {
 // Styles
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
-  title: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
+  title: { fontSize: 19, fontWeight: '700', marginBottom: 16 },
   groupsScroll: { maxHeight: 60, marginBottom: 16 },
   groupsContainer: { paddingHorizontal: 4, gap: 8 },
   groupChip: {
