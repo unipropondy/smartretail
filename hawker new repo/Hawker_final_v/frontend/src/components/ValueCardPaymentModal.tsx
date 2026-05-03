@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
     View, Text, Modal, StyleSheet, TouchableOpacity,
-    TextInput, Alert, ActivityIndicator, ScrollView
+    TextInput, Alert, ActivityIndicator, ScrollView,
+    Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import API from '../api';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ValueCardPaymentModalProps {
     visible: boolean;
@@ -27,6 +29,7 @@ const ValueCardPaymentModal: React.FC<ValueCardPaymentModalProps> = ({
     t,
     formatPrice
 }) => {
+    const insets = useSafeAreaInsets();
     const [step, setStep] = useState<'search' | 'amount'>('search');
     const [searchText, setSearchText] = useState('');
     const [members, setMembers] = useState<any[]>([]);
@@ -58,11 +61,8 @@ const ValueCardPaymentModal: React.FC<ValueCardPaymentModalProps> = ({
     const loadMembersWithCards = async () => {
         setLoading(true);
         try {
-            // Get all active value cards
             const response = await API.get('/value-cards');
             const cards = response.data || [];
-            
-            // Filter only cards with balance > 0
             const activeCards = cards.filter((c: any) => c.Balance > 0 && c.Status === 'ACTIVE');
             setMembers(activeCards);
             setFilteredMembers(activeCards);
@@ -77,90 +77,84 @@ const ValueCardPaymentModal: React.FC<ValueCardPaymentModalProps> = ({
     const handleSelectCard = (card: any) => {
         setSelectedCard(card);
         setStep('amount');
-        // Suggest max amount (up to total or balance)
         const maxAmount = Math.min(totalAmount, card.Balance);
         setUseAmount(maxAmount.toString());
     };
 
-const handleUseCard = async () => {
-    if (!selectedCard) return;
-    
-    const amount = parseFloat(useAmount);
-    if (isNaN(amount) || amount <= 0) {
-        Alert.alert('Error', 'Please enter valid amount');
-        return;
-    }
-    
-    if (amount > selectedCard.Balance) {
-        Alert.alert('Error', `Insufficient balance. Available: ${formatPrice(selectedCard.Balance)}`);
-        return;
-    }
-    
-    if (amount > totalAmount) {
-        Alert.alert('Error', `Amount cannot exceed bill total: ${formatPrice(totalAmount)}`);
-        return;
-    }
-    
-    setProcessing(true);
-    
-    const remainingAmount = totalAmount - amount;
-    
-    // ✅ Close card modal and send back result
-    onSuccess(amount, remainingAmount, selectedCard);
-    setProcessing(false);
-    setStep('search');
-    setSelectedCard(null);
-    setUseAmount('');
-    setSearchText('');
-    onClose();
-};
-    const resetModal = () => {
+    const handleUseCard = async () => {
+        if (!selectedCard) return;
+        
+        const amount = parseFloat(useAmount);
+        if (isNaN(amount) || amount <= 0) {
+            Alert.alert('Error', 'Please enter valid amount');
+            return;
+        }
+        
+        if (amount > selectedCard.Balance) {
+            Alert.alert('Error', `Insufficient balance. Available: ${formatPrice(selectedCard.Balance)}`);
+            return;
+        }
+        
+        if (amount > totalAmount) {
+            Alert.alert('Error', `Amount cannot exceed bill total: ${formatPrice(totalAmount)}`);
+            return;
+        }
+        
+        setProcessing(true);
+        
+        const remainingAmount = totalAmount - amount;
+        
+        onSuccess(amount, remainingAmount, selectedCard);
+        setProcessing(false);
         setStep('search');
         setSelectedCard(null);
         setUseAmount('');
         setSearchText('');
-        setMembers([]);
-        setFilteredMembers([]);
+        onClose();
     };
 
-    if (!visible) return null;
-
     return (
-        <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-            <View style={styles.modalOverlay}>
-                <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-                    
-                    {/* Header */}
-                    <View style={styles.header}>
-                        <TouchableOpacity onPress={() => {
-                            if (step === 'amount') {
-                                setStep('search');
-                            } else {
-                                onBack();
-                            }
-                        }}>
-                            <Ionicons name="arrow-back" size={24} color={theme.text} />
-                        </TouchableOpacity>
-                        <Text style={[styles.title, { color: theme.text }]}>
-                            {step === 'search' ? 'Select Value Card' : 'Enter Amount'}
-                        </Text>
-                        <TouchableOpacity onPress={onClose}>
-                            <Ionicons name="close" size={24} color={theme.text} />
-                        </TouchableOpacity>
-                    </View>
+        <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose}>
+            <View style={[styles.fullScreenModal, { backgroundColor: theme.background }]}>
+                
+                {/* Header */}
+                <View style={[styles.fullScreenHeader, { backgroundColor: theme.primary, paddingTop: insets.top + 15 }]}>
+                    <TouchableOpacity onPress={() => {
+                        if (step === 'amount') {
+                            setStep('search');
+                        } else {
+                            onBack();
+                        }
+                    }} style={styles.fullScreenBackBtn}>
+                        <Ionicons name="arrow-back" size={28} color="#fff" />
+                    </TouchableOpacity>
+                    <Text style={[styles.fullScreenTitle, { color: '#fff' }]}>
+                        {step === 'search' ? 'Select Value Card' : 'Enter Amount'}
+                    </Text>
+                    <TouchableOpacity onPress={onClose} style={styles.fullScreenClose}>
+                        <Ionicons name="close" size={28} color="#fff" />
+                    </TouchableOpacity>
+                </View>
 
+                <ScrollView 
+                    style={styles.fullScreenScroll}
+                    contentContainerStyle={styles.fullScreenContent}
+                    showsVerticalScrollIndicator={true}
+                    keyboardShouldPersistTaps="handled"
+                >
                     {step === 'search' ? (
                         <>
                             {/* Search Bar */}
-                            <View style={[styles.searchContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                            <View style={[styles.fullSearchContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                 <Ionicons name="search" size={20} color={theme.textSecondary} />
                                 <TextInput
-                                    style={[styles.searchInput, { color: theme.text }]}
+                                    style={[styles.fullSearchInput, { color: theme.text }]}
                                     placeholder="Search by name, mobile or card number..."
                                     placeholderTextColor={theme.textSecondary}
                                     value={searchText}
                                     onChangeText={setSearchText}
                                     autoFocus={true}
+                                    returnKeyType="search"
                                 />
                                 {searchText !== '' && (
                                     <TouchableOpacity onPress={() => setSearchText('')}>
@@ -170,67 +164,67 @@ const handleUseCard = async () => {
                             </View>
 
                             {/* Bill Total Display */}
-                            <View style={[styles.totalContainer, { backgroundColor: theme.primary + '20' }]}>
-                                <Text style={[styles.totalLabel, { color: theme.textSecondary }]}>Bill Total</Text>
-                                <Text style={[styles.totalValue, { color: theme.primary }]}>{formatPrice(totalAmount)}</Text>
+                            <View style={[styles.fullTotalContainer, { backgroundColor: theme.primary + '20' }]}>
+                                <Text style={[styles.fullTotalLabel, { color: theme.textSecondary }]}>Bill Total</Text>
+                                <Text style={[styles.fullTotalValue, { color: theme.primary }]}>{formatPrice(totalAmount)}</Text>
                             </View>
 
-                            {/* Members List */}
+                            {/* Cards List */}
                             {loading ? (
-                                <View style={styles.loadingContainer}>
+                                <View style={styles.fullLoadingContainer}>
                                     <ActivityIndicator size="large" color={theme.primary} />
                                 </View>
                             ) : filteredMembers.length === 0 ? (
-                                <View style={styles.emptyContainer}>
+                                <View style={styles.fullEmptyContainer}>
                                     <Ionicons name="card-outline" size={50} color={theme.textSecondary} />
-                                    <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                                    <Text style={[styles.fullEmptyText, { color: theme.textSecondary }]}>
                                         {searchText ? 'No matching cards found' : 'No active value cards available'}
                                     </Text>
                                 </View>
                             ) : (
-                                <ScrollView style={styles.listContainer}>
+                                <View style={styles.fullListContainer}>
                                     {filteredMembers.map((card) => (
                                         <TouchableOpacity
                                             key={card.Id}
-                                            style={[styles.cardItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                                            style={[styles.fullCardItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
                                             onPress={() => handleSelectCard(card)}
                                         >
-                                            <View style={styles.cardIcon}>
+                                            <View style={styles.fullCardIcon}>
                                                 <Ionicons name="card" size={24} color={theme.primary} />
                                             </View>
-                                            <View style={styles.cardInfo}>
-                                                <Text style={[styles.cardNumber, { color: theme.primary }]}>{card.CardNumber}</Text>
-                                                <Text style={[styles.cardMember, { color: theme.text }]}>{card.MemberName}</Text>
-                                                <Text style={[styles.cardMobile, { color: theme.textSecondary }]}>{card.MemberMobile}</Text>
+                                            <View style={styles.fullCardInfo}>
+                                                <Text style={[styles.fullCardNumber, { color: theme.primary }]}>{card.CardNumber}</Text>
+                                                <Text style={[styles.fullCardMember, { color: theme.text }]}>{card.MemberName}</Text>
+                                                <Text style={[styles.fullCardMobile, { color: theme.textSecondary }]}>{card.MemberMobile}</Text>
                                             </View>
-                                            <View style={styles.cardBalance}>
-                                                <Text style={[styles.balanceLabel, { color: theme.textSecondary }]}>Balance</Text>
-                                                <Text style={[styles.balanceValue, { color: theme.success }]}>{formatPrice(card.Balance)}</Text>
+                                            <View style={styles.fullCardBalance}>
+                                                <Text style={[styles.fullBalanceLabel, { color: theme.textSecondary }]}>Balance</Text>
+                                                <Text style={[styles.fullBalanceValue, { color: theme.success }]}>{formatPrice(card.Balance)}</Text>
                                             </View>
                                             <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
                                         </TouchableOpacity>
                                     ))}
-                                </ScrollView>
+                                </View>
                             )}
                         </>
                     ) : (
                         // Amount Selection Step
                         <>
-                            <View style={[styles.selectedCardContainer, { backgroundColor: theme.surface }]}>
-                                <Text style={[styles.selectedCardLabel, { color: theme.textSecondary }]}>Selected Card</Text>
-                                <Text style={[styles.selectedCardNumber, { color: theme.primary }]}>{selectedCard?.CardNumber}</Text>
-                                <Text style={[styles.selectedCardMember, { color: theme.text }]}>{selectedCard?.MemberName}</Text>
-                                <Text style={[styles.selectedCardBalance, { color: theme.success }]}>
+                            <View style={[styles.fullSelectedCardContainer, { backgroundColor: theme.surface }]}>
+                                <Text style={[styles.fullSelectedCardLabel, { color: theme.textSecondary }]}>Selected Card</Text>
+                                <Text style={[styles.fullSelectedCardNumber, { color: theme.primary }]}>{selectedCard?.CardNumber}</Text>
+                                <Text style={[styles.fullSelectedCardMember, { color: theme.text }]}>{selectedCard?.MemberName}</Text>
+                                <Text style={[styles.fullSelectedCardBalance, { color: theme.success }]}>
                                     Available: {formatPrice(selectedCard?.Balance || 0)}
                                 </Text>
                             </View>
 
-                            <View style={styles.amountInputContainer}>
-                                <Text style={[styles.amountLabel, { color: theme.text }]}>Amount to pay using card</Text>
-                                <View style={[styles.amountInputWrapper, { borderColor: theme.primary }]}>
-                                    <Text style={[styles.currencySymbol, { color: theme.primary }]}>₹</Text>
+                            <View style={styles.fullAmountInputContainer}>
+                                <Text style={[styles.fullAmountLabel, { color: theme.text }]}>Amount to pay using card</Text>
+                                <View style={[styles.fullAmountInputWrapper, { borderColor: theme.primary, backgroundColor: theme.surface }]}>
+                                    <Text style={[styles.fullCurrencySymbol, { color: theme.primary }]}>₹</Text>
                                     <TextInput
-                                        style={[styles.amountInput, { color: theme.text }]}
+                                        style={[styles.fullAmountInput, { color: theme.text }]}
                                         placeholder="0.00"
                                         placeholderTextColor={theme.textSecondary}
                                         keyboardType="numeric"
@@ -241,281 +235,293 @@ const handleUseCard = async () => {
                                 </View>
                             </View>
 
-                            <View style={styles.quickAmountContainer}>
-                                <Text style={[styles.quickLabel, { color: theme.textSecondary }]}>Quick Select</Text>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            <View style={styles.fullQuickAmountContainer}>
+                                <Text style={[styles.fullQuickLabel, { color: theme.textSecondary }]}>Quick Select</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fullQuickScroll}>
                                     {[100, 200, 500, 1000].map(amount => (
                                         <TouchableOpacity
                                             key={amount}
-                                            style={[styles.quickBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                                            style={[styles.fullQuickBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
                                             onPress={() => setUseAmount(Math.min(amount, totalAmount, selectedCard?.Balance || 0).toString())}
                                         >
-                                            <Text style={[styles.quickBtnText, { color: theme.text }]}>{formatPrice(amount)}</Text>
+                                            <Text style={[styles.fullQuickBtnText, { color: theme.text }]}>{formatPrice(amount)}</Text>
                                         </TouchableOpacity>
                                     ))}
                                     <TouchableOpacity
-                                        style={[styles.quickBtn, styles.maxBtn, { backgroundColor: theme.primary }]}
+                                        style={[styles.fullQuickBtn, styles.fullMaxBtn, { backgroundColor: theme.primary }]}
                                         onPress={() => setUseAmount(Math.min(totalAmount, selectedCard?.Balance || 0).toString())}
                                     >
-                                        <Text style={[styles.quickBtnText, { color: '#fff' }]}>Max</Text>
+                                        <Text style={[styles.fullQuickBtnText, { color: '#fff' }]}>Max</Text>
                                     </TouchableOpacity>
                                 </ScrollView>
                             </View>
 
-                            <View style={[styles.previewContainer, { backgroundColor: theme.primary + '10' }]}>
-                                <View style={styles.previewRow}>
-                                    <Text style={[styles.previewLabel, { color: theme.textSecondary }]}>Bill Total:</Text>
-                                    <Text style={[styles.previewValue, { color: theme.text }]}>{formatPrice(totalAmount)}</Text>
+                            <View style={[styles.fullPreviewContainer, { backgroundColor: theme.primary + '10' }]}>
+                                <View style={styles.fullPreviewRow}>
+                                    <Text style={[styles.fullPreviewLabel, { color: theme.textSecondary }]}>Bill Total:</Text>
+                                    <Text style={[styles.fullPreviewValue, { color: theme.text }]}>{formatPrice(totalAmount)}</Text>
                                 </View>
-                                <View style={styles.previewRow}>
-                                    <Text style={[styles.previewLabel, { color: theme.textSecondary }]}>Card Payment:</Text>
-                                    <Text style={[styles.previewValue, { color: theme.success }]}>-{formatPrice(parseFloat(useAmount) || 0)}</Text>
+                                <View style={styles.fullPreviewRow}>
+                                    <Text style={[styles.fullPreviewLabel, { color: theme.textSecondary }]}>Card Payment:</Text>
+                                    <Text style={[styles.fullPreviewValue, { color: theme.success }]}>-{formatPrice(parseFloat(useAmount) || 0)}</Text>
                                 </View>
-                                <View style={[styles.previewDivider, { backgroundColor: theme.border }]} />
-                                <View style={styles.previewRow}>
-                                    <Text style={[styles.previewLabel, { color: theme.text, fontWeight: '700' }]}>Remaining to Pay:</Text>
-                                    <Text style={[styles.previewValue, { color: theme.warning, fontWeight: '700' }]}>
+                                <View style={[styles.fullPreviewDivider, { backgroundColor: theme.border }]} />
+                                <View style={styles.fullPreviewRow}>
+                                    <Text style={[styles.fullPreviewLabel, { color: theme.text, fontWeight: '700' }]}>Remaining to Pay:</Text>
+                                    <Text style={[styles.fullPreviewValue, { color: theme.warning, fontWeight: '700' }]}>
                                         {formatPrice(totalAmount - (parseFloat(useAmount) || 0))}
                                     </Text>
                                 </View>
                             </View>
 
                             <TouchableOpacity
-                                style={[styles.payButton, { backgroundColor: theme.success }]}
+                                style={[styles.fullPayButton, { backgroundColor: theme.success }]}
                                 onPress={handleUseCard}
                                 disabled={processing}
                             >
                                 {processing ? (
                                     <ActivityIndicator size="small" color="#fff" />
                                 ) : (
-                                    <Text style={styles.payButtonText}>
+                                    <Text style={styles.fullPayButtonText}>
                                         Use Card - {formatPrice(parseFloat(useAmount) || 0)}
                                     </Text>
                                 )}
                             </TouchableOpacity>
                         </>
                     )}
-                </View>
+                    
+                    <View style={{ height: 30 }} />
+                </ScrollView>
             </View>
         </Modal>
     );
 };
 
 const styles = StyleSheet.create({
-    modalOverlay: {
+    fullScreenModal: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
     },
-    modalContent: {
-        width: '100%',
-        maxWidth: 400,
-        borderRadius: 20,
-        padding: 20,
-        maxHeight: '90%',
-    },
-    header: {
+    fullScreenHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+        paddingHorizontal: 16,
+        paddingBottom: 15,
     },
-    title: {
+    fullScreenBackBtn: {
+        padding: 8,
+    },
+    fullScreenTitle: {
         fontSize: 18,
         fontWeight: '600',
-    },
-    searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderRadius: 10,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        marginBottom: 16,
-    },
-    searchInput: {
+        color: '#fff',
         flex: 1,
-        marginLeft: 8,
-        fontSize: 14,
-    },
-    totalContainer: {
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    totalLabel: {
-        fontSize: 12,
-        marginBottom: 4,
-    },
-    totalValue: {
-        fontSize: 24,
-        fontWeight: '700',
-    },
-    loadingContainer: {
-        padding: 40,
-        alignItems: 'center',
-    },
-    emptyContainer: {
-        padding: 40,
-        alignItems: 'center',
-    },
-    emptyText: {
-        fontSize: 14,
-        marginTop: 10,
         textAlign: 'center',
     },
-    listContainer: {
-        maxHeight: 400,
+    fullScreenClose: {
+        padding: 8,
     },
-    cardItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-        marginBottom: 8,
-    },
-    cardIcon: {
-        width: 45,
-        height: 45,
-        borderRadius: 22,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    cardInfo: {
+    fullScreenScroll: {
         flex: 1,
     },
-    cardNumber: {
-        fontSize: 12,
+    fullScreenContent: {
+        padding: 20,
+        paddingBottom: 40,
+    },
+    fullSearchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        marginBottom: 20,
+    },
+    fullSearchInput: {
+        flex: 1,
+        marginLeft: 10,
+        fontSize: 15,
+    },
+    fullTotalContainer: {
+        padding: 20,
+        borderRadius: 16,
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    fullTotalLabel: {
+        fontSize: 14,
+        marginBottom: 6,
+    },
+    fullTotalValue: {
+        fontSize: 32,
+        fontWeight: '700',
+    },
+    fullLoadingContainer: {
+        padding: 50,
+        alignItems: 'center',
+    },
+    fullEmptyContainer: {
+        padding: 50,
+        alignItems: 'center',
+    },
+    fullEmptyText: {
+        fontSize: 15,
+        marginTop: 12,
+        textAlign: 'center',
+    },
+    fullListContainer: {
+        marginBottom: 20,
+    },
+    fullCardItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 14,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginBottom: 10,
+    },
+    fullCardIcon: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 14,
+    },
+    fullCardInfo: {
+        flex: 1,
+    },
+    fullCardNumber: {
+        fontSize: 13,
         fontWeight: '600',
         fontFamily: 'monospace',
-        marginBottom: 2,
+        marginBottom: 3,
     },
-    cardMember: {
-        fontSize: 14,
+    fullCardMember: {
+        fontSize: 15,
         fontWeight: '500',
         marginBottom: 2,
     },
-    cardMobile: {
-        fontSize: 11,
+    fullCardMobile: {
+        fontSize: 12,
     },
-    cardBalance: {
+    fullCardBalance: {
         alignItems: 'flex-end',
-        marginRight: 8,
+        marginRight: 10,
     },
-    balanceLabel: {
+    fullBalanceLabel: {
         fontSize: 10,
     },
-    balanceValue: {
-        fontSize: 14,
+    fullBalanceValue: {
+        fontSize: 15,
         fontWeight: '700',
     },
-    selectedCardContainer: {
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 20,
+    fullSelectedCardContainer: {
+        padding: 20,
+        borderRadius: 16,
         alignItems: 'center',
+        marginBottom: 25,
     },
-    selectedCardLabel: {
-        fontSize: 11,
-        marginBottom: 4,
+    fullSelectedCardLabel: {
+        fontSize: 12,
+        marginBottom: 5,
     },
-    selectedCardNumber: {
-        fontSize: 16,
+    fullSelectedCardNumber: {
+        fontSize: 18,
         fontWeight: '700',
         fontFamily: 'monospace',
-        marginBottom: 4,
+        marginBottom: 5,
     },
-    selectedCardMember: {
-        fontSize: 14,
-        marginBottom: 4,
+    fullSelectedCardMember: {
+        fontSize: 16,
+        marginBottom: 5,
     },
-    selectedCardBalance: {
-        fontSize: 14,
+    fullSelectedCardBalance: {
+        fontSize: 15,
         fontWeight: '600',
     },
-    amountInputContainer: {
-        marginBottom: 20,
+    fullAmountInputContainer: {
+        marginBottom: 25,
     },
-    amountLabel: {
-        fontSize: 14,
-        marginBottom: 8,
+    fullAmountLabel: {
+        fontSize: 15,
+        marginBottom: 10,
+        fontWeight: '500',
     },
-    amountInputWrapper: {
+    fullAmountInputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
         borderWidth: 2,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        height: 60,
+        borderRadius: 14,
+        paddingHorizontal: 18,
+        height: 70,
     },
-    currencySymbol: {
-        fontSize: 24,
+    fullCurrencySymbol: {
+        fontSize: 28,
         fontWeight: '600',
-        marginRight: 12,
+        marginRight: 14,
     },
-    amountInput: {
+    fullAmountInput: {
         flex: 1,
-        fontSize: 24,
+        fontSize: 28,
         padding: 0,
     },
-    quickAmountContainer: {
-        marginBottom: 20,
+    fullQuickAmountContainer: {
+        marginBottom: 25,
     },
-    quickLabel: {
-        fontSize: 12,
-        marginBottom: 8,
+    fullQuickLabel: {
+        fontSize: 14,
+        marginBottom: 12,
+        fontWeight: '500',
     },
-    quickBtn: {
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 20,
+    fullQuickScroll: {
+        maxHeight: 55,
+    },
+    fullQuickBtn: {
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 25,
         borderWidth: 1,
-        marginRight: 8,
-        minWidth: 70,
+        marginRight: 10,
+        minWidth: 80,
         alignItems: 'center',
     },
-    maxBtn: {
-        backgroundColor: '#4CAF50',
+    fullMaxBtn: {
         borderWidth: 0,
     },
-    quickBtnText: {
+    fullQuickBtnText: {
         fontSize: 14,
         fontWeight: '600',
     },
-    previewContainer: {
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 20,
+    fullPreviewContainer: {
+        padding: 18,
+        borderRadius: 14,
+        marginBottom: 25,
     },
-    previewRow: {
+    fullPreviewRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 8,
+        marginBottom: 10,
     },
-    previewLabel: {
+    fullPreviewLabel: {
         fontSize: 14,
     },
-    previewValue: {
+    fullPreviewValue: {
         fontSize: 14,
         fontWeight: '500',
     },
-    previewDivider: {
+    fullPreviewDivider: {
         height: 1,
-        marginVertical: 8,
+        marginVertical: 10,
     },
-    payButton: {
+    fullPayButton: {
         paddingVertical: 16,
-        borderRadius: 12,
+        borderRadius: 14,
         alignItems: 'center',
     },
-    payButtonText: {
+    fullPayButtonText: {
         color: '#fff',
-        fontSize: 16,
+        fontSize: 17,
         fontWeight: '700',
     },
 });

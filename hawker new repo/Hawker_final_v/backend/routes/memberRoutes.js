@@ -90,6 +90,12 @@ router.post('/members', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Name and mobile are required' });
         }
         
+        // ✅ ADD MOBILE VALIDATION - Support 8 to 15 digits (Singapore, India, etc.)
+        const mobileRegex = /^\d{8,15}$/;
+        if (!mobileRegex.test(mobile)) {
+            return res.status(400).json({ error: 'Please enter valid mobile number (8-15 digits)' });
+        }
+        
         const pool = getPool();
         
         const existing = await pool.request()
@@ -165,6 +171,7 @@ router.get('/value-cards', authenticateToken, async (req, res) => {
 // CREATE value card with sequential number
 // CREATE value card with PER OUTLET sequential number
 // CREATE value card with sequential number - FIXED
+// CREATE value card with DATE-based sequential number
 router.post('/value-cards', authenticateToken, async (req, res) => {
     try {
         const outletId = await getOutletId(req);
@@ -190,35 +197,41 @@ router.post('/value-cards', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Member not found' });
         }
         
-        // ✅ FIXED: Get last card number using STRING comparison (not INT conversion)
+        // ✅ Generate date prefix (YYYYMMDD) based on Singapore time
+        const now = new Date();
+        // Convert to Singapore time (UTC+8)
+        const singaporeTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+        const year = singaporeTime.getUTCFullYear();
+        const month = String(singaporeTime.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(singaporeTime.getUTCDate()).padStart(2, '0');
+        const datePrefix = `${year}${month}${day}`;
+        
+        // ✅ Get today's max sequence number for this outlet
         const lastCardResult = await pool.request()
             .input('outletId', sql.Int, outletId)
+            .input('datePrefix', sql.NVarChar, `VC${datePrefix}-%`)
             .query(`
                 SELECT TOP 1 CardNumber 
                 FROM ValueCards 
                 WHERE OutletId = @outletId 
-                ORDER BY Id DESC
+                AND CardNumber LIKE @datePrefix
+                ORDER BY CardNumber DESC
             `);
         
-        let nextNumber = 1;
+        let nextSequence = 1;
         if (lastCardResult.recordset.length > 0) {
             const lastCard = lastCardResult.recordset[0].CardNumber;
-            // ✅ Extract number using string methods (not CAST to INT)
-            const match = lastCard.match(/VC(\d+)/);
+            // Extract sequence number after '-'
+            const match = lastCard.match(/-(\d+)$/);
             if (match) {
-                let num = parseInt(match[1]);
-                if (!isNaN(num)) {
-                    nextNumber = num + 1;
-                }
-            }
-            // ✅ If number is > 9999, reset to 1
-            if (nextNumber > 9999) {
-                nextNumber = 1;
+                nextSequence = parseInt(match[1]) + 1;
             }
         }
         
-        // Format as VC0001, VC0002, etc.
-        const cardNumber = `VC${nextNumber.toString().padStart(4, '0')}`;
+        // Format as VC20260503-0001
+        const cardNumber = `VC${datePrefix}-${nextSequence.toString().padStart(4, '0')}`;
+        
+        console.log('📇 Generated card number:', cardNumber);
         
         const cardVal = parseFloat(cardValue) || 0;
         const serviceVal = parseFloat(serviceValue) || 0;
@@ -254,7 +267,7 @@ router.post('/value-cards', authenticateToken, async (req, res) => {
         console.error('❌ Error:', err);
         res.status(500).json({ error: err.message });
     }
-});        
+}); 
 // ============================================
 // USE VALUE CARD FOR PAYMENT
 // ============================================

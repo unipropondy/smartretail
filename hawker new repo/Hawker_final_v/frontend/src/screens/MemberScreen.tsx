@@ -83,39 +83,41 @@ const MemberScreen: React.FC<MemberScreenProps> = ({ visible, onClose, theme, t,
         }
     };
 
-    const handleAddMember = async () => {
-        if (!formName.trim() || !formMobile.trim()) {
-            Alert.alert('Error', 'Name and mobile number are required');
-            return;
-        }
+   const handleAddMember = async () => {
+    if (!formName.trim() || !formMobile.trim()) {
+        Alert.alert('Error', 'Name and mobile number are required');
+        return;
+    }
+    
+    // ✅ Flexible mobile validation - Support 8 to 15 digits
+    const mobileRegex = /^\d{8,15}$/;
+    if (!mobileRegex.test(formMobile.trim())) {
+        Alert.alert('Error', 'Please enter valid mobile number (8-15 digits)');
+        return;
+    }
+    
+    setSaving(true);
+    try {
+        const response = await API.post('/members', {
+            name: formName.trim(),
+            mobile: formMobile.trim(),
+            address: formAddress.trim(),
+            email: formEmail.trim(),
+            notes: formNotes.trim()
+        });
         
-        if (!/^\d{10}$/.test(formMobile.trim())) {
-            Alert.alert('Error', 'Please enter valid 10-digit mobile number');
-            return;
+        if (response.data.success) {
+            Alert.alert('Success', 'Member added successfully');
+            setShowAddForm(false);
+            resetForm();
+            loadMembers();
         }
-        
-        setSaving(true);
-        try {
-            const response = await API.post('/members', {
-                name: formName.trim(),
-                mobile: formMobile.trim(),
-                address: formAddress.trim(),
-                email: formEmail.trim(),
-                notes: formNotes.trim()
-            });
-            
-            if (response.data.success) {
-                Alert.alert('Success', 'Member added successfully');
-                setShowAddForm(false);
-                resetForm();
-                loadMembers();
-            }
-        } catch (error: any) {
-            Alert.alert('Error', error.response?.data?.error || 'Failed to add member');
-        } finally {
-            setSaving(false);
-        }
-    };
+    } catch (error: any) {
+        Alert.alert('Error', error.response?.data?.error || 'Failed to add member');
+    } finally {
+        setSaving(false);
+    }
+};
 
     const resetForm = () => {
         setFormName('');
@@ -296,18 +298,18 @@ return (
 
             <Text style={[styles.fullScreenLabel, { color: theme.textSecondary }]}>Mobile Number *</Text>
             <TextInput
-                style={[styles.fullScreenInput, { 
-                    backgroundColor: theme.surface, 
-                    borderColor: theme.border, 
-                    color: theme.text 
-                }]}
-                placeholder="10-digit mobile number"
-                placeholderTextColor={theme.textSecondary}
-                keyboardType="phone-pad"
-                maxLength={10}
-                value={formMobile}
-                onChangeText={setFormMobile}
-            />
+    style={[styles.fullScreenInput, { 
+        backgroundColor: theme.surface, 
+        borderColor: theme.border, 
+        color: theme.text 
+    }]}
+    placeholder="Enter mobile number (8-15 digits)"
+    placeholderTextColor={theme.textSecondary}
+    keyboardType="phone-pad"
+    maxLength={15}  // ✅ Changed from 10 to 15
+    value={formMobile}
+    onChangeText={setFormMobile}
+/>
 
             <Text style={[styles.fullScreenLabel, { color: theme.textSecondary }]}>Address (Optional)</Text>
             <TextInput

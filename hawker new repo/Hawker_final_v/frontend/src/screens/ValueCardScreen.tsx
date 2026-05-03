@@ -480,19 +480,151 @@ const ValueCardScreen: React.FC<ValueCardScreenProps> = ({ visible, onClose, the
                 </Modal>
 
                 {/* History Modal */}
-                <Modal visible={showHistory} transparent={true} animationType="slide" onRequestClose={() => setShowHistory(false)}>
-                    <View style={styles.historyModalOverlay}>
-                        <View style={[styles.historyModalContent, { backgroundColor: theme.card }]}>
-                            <View style={styles.formHeader}>
-                                <Text style={[styles.formTitle, { color: theme.text }]}>Transaction History</Text>
-                                <TouchableOpacity onPress={() => setShowHistory(false)}>
-                                    <Ionicons name="close" size={24} color={theme.text} />
-                                </TouchableOpacity>
-                            </View>
-                            <Text style={[styles.fullScreenLabel, { color: theme.textSecondary }]}>Coming soon...</Text>
+                {/* History Modal - Complete */}
+<Modal visible={showHistory} transparent={true} animationType="slide" onRequestClose={() => setShowHistory(false)}>
+    <View style={styles.historyModalOverlay}>
+        <View style={[styles.historyModalContent, { backgroundColor: theme.card }]}>
+            
+            <View style={styles.historyHeader}>
+                <Text style={[styles.historyTitle, { color: theme.text }]}>
+                    Transaction History
+                </Text>
+                <TouchableOpacity onPress={() => setShowHistory(false)}>
+                    <Ionicons name="close" size={24} color={theme.text} />
+                </TouchableOpacity>
+            </View>
+
+            {selectedCard && (
+                <ScrollView style={styles.historyScroll} showsVerticalScrollIndicator={true}>
+                    
+                    {/* Card Info */}
+                    <View style={[styles.historyCardInfo, { backgroundColor: theme.surface }]}>
+                        <Text style={[styles.historyCardNumber, { color: theme.primary }]}>
+                            {selectedCard.CardNumber}
+                        </Text>
+                        <View style={styles.historyInfoRow}>
+                            <Text style={[styles.historyInfoLabel, { color: theme.textSecondary }]}>Member:</Text>
+                            <Text style={[styles.historyInfoValue, { color: theme.text }]}>{selectedCard.MemberName}</Text>
+                        </View>
+                        <View style={styles.historyInfoRow}>
+                            <Text style={[styles.historyInfoLabel, { color: theme.textSecondary }]}>Mobile:</Text>
+                            <Text style={[styles.historyInfoValue, { color: theme.text }]}>{selectedCard.MemberMobile}</Text>
+                        </View>
+                        <View style={styles.historyDivider} />
+                        <View style={styles.historyInfoRow}>
+                            <Text style={[styles.historyInfoLabel, { color: theme.textSecondary }]}>Card Value:</Text>
+                            <Text style={[styles.historyInfoValue, { color: theme.text }]}>{formatCurrency(selectedCard.CardValue)}</Text>
+                        </View>
+                        <View style={styles.historyInfoRow}>
+                            <Text style={[styles.historyInfoLabel, { color: theme.textSecondary }]}>Service:</Text>
+                            <Text style={[styles.historyInfoValue, { color: theme.success }]}>+{formatCurrency(selectedCard.ServiceValue)}</Text>
+                        </View>
+                        <View style={styles.historyInfoRow}>
+                            <Text style={[styles.historyInfoLabel, { color: theme.textSecondary }]}>Current Balance:</Text>
+                            <Text style={[styles.historyInfoValue, { color: theme.primary, fontWeight: '700' }]}>
+                                {formatCurrency(selectedCard.Balance)}
+                            </Text>
                         </View>
                     </View>
-                </Modal>
+
+                    {/* Transactions List */}
+                    <Text style={[styles.historySectionTitle, { color: theme.text }]}>
+                        Transaction History
+                    </Text>
+
+                    {transactions.length === 0 ? (
+                        <View style={styles.historyEmpty}>
+                            <Ionicons name="receipt-outline" size={40} color={theme.textSecondary} />
+                            <Text style={[styles.historyEmptyText, { color: theme.textSecondary }]}>
+                                No transactions yet
+                            </Text>
+                        </View>
+                    ) : (
+                        transactions.map((trans, index) => (
+                            <View key={index} style={[styles.historyTransactionItem, { backgroundColor: theme.surface }]}>
+                                
+                                {/* Header with Amount */}
+                                <View style={styles.historyTransactionHeader}>
+                                    {trans.TransactionType === 'TOPUP' ? (
+                                        <Text style={[styles.historyTransactionAmount, { color: theme.success }]}>
+                                            +{formatCurrency(trans.Amount)}
+                                        </Text>
+                                    ) : trans.TransactionType === 'REFUND' ? (
+                                        <Text style={[styles.historyTransactionAmount, { color: theme.info }]}>
+                                            +{formatCurrency(trans.Amount)} (Refund)
+                                        </Text>
+                                    ) : (
+                                        <Text style={[styles.historyTransactionAmount, { color: theme.danger }]}>
+                                            -{formatCurrency(trans.Amount)}
+                                        </Text>
+                                    )}
+                                    <Text style={[styles.historyTransactionDate, { color: theme.textSecondary }]}>
+                                        {new Date(trans.TransactionDate).toLocaleString()}
+                                    </Text>
+                                </View>
+
+                                {/* Transaction Type Badge */}
+                                <View style={styles.historyTransactionType}>
+                                    <Text style={[
+                                        styles.historyTransactionTypeText,
+                                        { 
+                                            color: trans.TransactionType === 'TOPUP' ? theme.success : 
+                                                   trans.TransactionType === 'REFUND' ? theme.info : theme.danger,
+                                            backgroundColor: trans.TransactionType === 'TOPUP' ? theme.success + '20' : 
+                                                           trans.TransactionType === 'REFUND' ? theme.info + '20' : theme.danger + '20'
+                                        }
+                                    ]}>
+                                        {trans.TransactionType === 'TOPUP' ? '💰 TOP-UP' : 
+                                         trans.TransactionType === 'REFUND' ? '🔄 REFUND' : '🛒 PURCHASE'}
+                                    </Text>
+                                </View>
+
+                                {/* Items List (for PURCHASE) */}
+                                {trans.Items && trans.Items.length > 0 && (
+                                    <View style={styles.historyItemsList}>
+                                        <Text style={[styles.historyItemsTitle, { color: theme.textSecondary }]}>
+                                            {trans.TransactionType === 'REFUND' ? 'Items refunded:' : 'Items purchased:'}
+                                        </Text>
+                                        {trans.Items.map((item: any, idx: number) => (
+                                            <View key={idx} style={styles.historyItemRow}>
+                                                <Text style={[styles.historyItemName, { color: theme.text }]}>
+                                                    {item.name} x{item.quantity}
+                                                </Text>
+                                                <Text style={[styles.historyItemPrice, { color: trans.TransactionType === 'REFUND' ? theme.info : theme.primary }]}>
+                                                    {formatCurrency(item.price * item.quantity)}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
+
+                                {/* Description */}
+                                <Text style={[styles.historyTransactionDesc, { color: theme.textSecondary }]}>
+                                    {trans.Description || trans.TransactionType}
+                                </Text>
+
+                                {/* Invoice Number */}
+                                {trans.InvoiceNumber && (
+                                    <Text style={[styles.historyInvoice, { color: theme.textSecondary }]}>
+                                        Invoice: {trans.InvoiceNumber}
+                                    </Text>
+                                )}
+
+                                {/* Balance After */}
+                                <View style={styles.historyBalanceRow}>
+                                    <Text style={[styles.historyBalanceLabel, { color: theme.textSecondary }]}>Balance:</Text>
+                                    <Text style={[styles.historyBalanceValue, { color: theme.success }]}>
+                                        {formatCurrency(trans.BalanceAfter)}
+                                    </Text>
+                                </View>
+                            </View>
+                        ))
+                    )}
+                </ScrollView>
+            )}
+        </View>
+    </View>
+</Modal>
             </View>
         </Modal>
     );
@@ -519,6 +651,143 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 1,
     },
+    // History Modal Styles
+historyScroll: {
+    maxHeight: 500,
+},
+historyCardInfo: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+},
+historyCardNumber: {
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+    textAlign: 'center',
+    marginBottom: 12,
+},
+historyInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+},
+historyInfoLabel: {
+    fontSize: 13,
+},
+historyInfoValue: {
+    fontSize: 13,
+    fontWeight: '500',
+},
+historyDivider: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    marginVertical: 10,
+},
+historySectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+},
+historyEmpty: {
+    padding: 30,
+    alignItems: 'center',
+},
+historyEmptyText: {
+    fontSize: 14,
+    marginTop: 10,
+},
+historyTransactionItem: {
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+},
+historyTransactionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+},
+historyTransactionAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+},
+historyTransactionDate: {
+    fontSize: 11,
+},
+historyTransactionType: {
+    marginBottom: 8,
+},
+historyTransactionTypeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+},
+historyItemsList: {
+    marginTop: 8,
+    marginBottom: 8,
+    paddingLeft: 8,
+    borderLeftWidth: 2,
+    borderLeftColor: 'rgba(0,0,0,0.1)',
+},
+historyItemsTitle: {
+    fontSize: 11,
+    marginBottom: 4,
+    fontWeight: '500',
+},
+historyItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+},
+historyItemName: {
+    fontSize: 12,
+    flex: 1,
+},
+historyItemPrice: {
+    fontSize: 12,
+    fontWeight: '500',
+},
+historyTransactionDesc: {
+    fontSize: 12,
+    marginBottom: 4,
+},
+historyInvoice: {
+    fontSize: 10,
+    marginBottom: 4,
+},
+historyBalanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+},
+historyBalanceLabel: {
+    fontSize: 12,
+},
+historyBalanceValue: {
+    fontSize: 14,
+    fontWeight: '700',
+},
+historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+},
+historyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+},
     searchInput: { flex: 1, marginLeft: 8, fontSize: 14 },
     createButton: {
         flexDirection: 'row',

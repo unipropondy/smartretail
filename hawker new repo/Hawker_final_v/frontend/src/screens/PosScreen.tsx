@@ -188,15 +188,7 @@ const renderContentByLayer = ({
             )}
             
             {/* ✅ Add Manage Departments button inside ScrollView, not outside */}
-            {is3LayerMode && (user?.role === 'admin' || user?.role === 'owner') && (
-                <TouchableOpacity
-                    style={[styles.manageDeptBtn, { backgroundColor: currentTheme.secondary, marginTop: 20, marginBottom: 20 }]}
-                    onPress={() => setShowDepartmentSelector(true)}
-                >
-                    <Ionicons name="settings" size={20} color="#fff" />
-                    <Text style={styles.manageDeptBtnText}>Manage Departments</Text>
-                </TouchableOpacity>
-            )}
+          
             
             {/* ✅ EXTRA BOTTOM SPACE FOR SCROLLING */}
             <View style={{ height: 30 }} />
