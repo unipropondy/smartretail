@@ -70,6 +70,7 @@ export interface ThemeType {
   warning: string;
   danger: string;
   inactive: string;
+  gradient?: string[];
 }
 
 export interface User {

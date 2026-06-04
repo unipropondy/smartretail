@@ -27,7 +27,10 @@ const ownerRoutes = require('./routes/ownerRoutes');
 const cashDrawerRoutes = require('./routes/cashDrawerRoutes');
 const memberRoutes = require('./routes/memberRoutes');
 const departmentRoutes = require('./routes/departmentRoutes');
-
+const settlementRoutes = require('./routes/settlementRoutes');
+const emailRoutes = require('./routes/emailRoutes');
+const outletRoutes = require('./routes/outletRoutes');
+const yeahpayRoutes = require('./routes/yeahpayRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const uploadDir = path.join(__dirname, 'uploads');
@@ -45,18 +48,21 @@ const storage = multer.diskStorage({
     cb(null, uniqueSuffix + path.extname(file.originalname));
   }
 });
+app.set('trust proxy', 1);
 const apiLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute (reduced from 15 min)
-    max: 60, // 60 requests per minute (increased)
+    windowMs: 60 * 1000,
+    max: 60,
     message: { error: 'Too many requests, please try again later.' },
-    skipSuccessfulRequests: true, // Don't count successful requests
+    skipSuccessfulRequests: true,
+    // ✅ Optional: Disable X-Forwarded-For check
+    validate: { xForwardedForHeader: false }  // Add this
 });
-
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 10, // Increased from 5
+    max: 10,
     skipSuccessfulRequests: true,
-    message: { error: 'Too many login attempts' }
+    message: { error: 'Too many login attempts' },
+    validate: { xForwardedForHeader: false }  // Add this
 });
 
 // ✅ FIXED SLOW DOWN (YOUR MAIN CHANGE)
@@ -223,7 +229,10 @@ app.use('/api', authenticateToken, updateSessionActivity);
 app.use('/api', memberRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/user', authenticateToken, apiLimiter, userRoutes); 
-
+app.use('/api/settlement', authenticateToken, settlementRoutes);
+app.use('/api', emailRoutes);
+app.use('/api/outlet', authenticateToken, outletRoutes);
+app.use('/api/yeahpay', authenticateToken, yeahpayRoutes);
 // Add near the top after middleware
 app.get('/health', (req, res) => {
     res.json({ 

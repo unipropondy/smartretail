@@ -20,7 +20,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // ✅ ADD THIS
 import { useAuth } from '../context/AuthContext';
 
-const companyLogo = require('../../assets/images/smarthawker icon final.png');
+const companyLogo = require('../../assets/images/smartretail.png');
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
@@ -161,7 +161,7 @@ const clearSavedCredentials = async () => {
             </Text>
             
             <Text style={styles.subText}>
-              Login to Smart Hawker POS
+              Login to Smart Retail POS
             </Text>
 
             {/* Login Form */}
@@ -242,7 +242,7 @@ const clearSavedCredentials = async () => {
             {/* Company Name and Copyright */}
             <View style={styles.companyFooter}>
               <Text style={styles.companyName}>
-                SMART HAWKER BY UNIPROSG
+                SMART RETAIL BY UNIPROSG
               </Text>
               <Text style={styles.copyright}>
                 © 2026-2027 UNIPRO SOFTWARES SG PTE LTD. All rights reserved.

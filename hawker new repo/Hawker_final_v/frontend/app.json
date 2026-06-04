@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "SMART HAWKER",
+    "name": "Smart Retail",
     "slug": "unipro-pos-new",
     "version": "3.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/images/smarthawker icon final.png",
+    "orientation": "default",
+    "icon": "./assets/images/smart.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/images/smarthawker icon final.png",
+      "image": "./assets/images/smart.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFFFFF"
     },
@@ -19,14 +19,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.unipro.pos"
+      "bundleIdentifier": "com.unipro.retail"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/smarthawker icon final.png",
+        "foregroundImage": "./assets/images/smart.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "com.unipro.pos",
+      "package": "com.unipro.retail",
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
@@ -34,7 +34,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/images/smarthawker icon final.png"
+      "favicon": "./assets/images/smart.png"
     },
     "plugins": [
       "@react-native-community/datetimepicker",

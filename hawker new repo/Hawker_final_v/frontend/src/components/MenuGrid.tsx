@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { MenuItem } from '../types';
 import { Ionicons } from '@expo/vector-icons';
-
+import { cacheImage } from '../utils/imageCache';
 interface PlaceholderItem {
   id: string;
   isPlaceholder: boolean;
@@ -190,6 +190,18 @@ useEffect(() => {
     console.log('❌ Modal is CLOSED');
   }
 }, [showPriceModal]);
+// In MenuGrid.tsx
+useEffect(() => {
+    const cacheItemImages = async () => {
+        for (const item of currentItems) {
+            if (item.imageUri && !loadedImages.has(item.imageUri)) {
+                const cachedUri = await cacheImage(item.imageUri, `dish_${item.id}`);
+                setLoadedImages(prev => new Set(prev).add(cachedUri));
+            }
+        }
+    };
+    cacheItemImages();
+}, [currentItems]);
   // Queue images
   useEffect(() => {
     displayItems.forEach(item => {
@@ -313,9 +325,9 @@ onPress={() => {
                       <Text style={styles.menuItemImagePlaceholderText}>⏳</Text>
                     </View>
                   ) : (
-                    <View style={styles.menuItemImagePlaceholder}>
-                      <Text style={styles.menuItemImagePlaceholderText}>🍽️</Text>
-                    </View>
+        <View style={styles.menuItemImagePlaceholder}>
+    <Ionicons name="cart-outline" size={32} color={theme.textSecondary} />
+</View>
                   )}
                 </View>
                 

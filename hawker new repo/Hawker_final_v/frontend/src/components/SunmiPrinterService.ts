@@ -1,4 +1,4 @@
-// components/SunmiPrinterService.ts - PERFECT DESIGN MATCHING YOUR PREVIEW ✅
+// components/SunmiPrinterService.ts - FIXED VERSION
 
 import { 
   initPrinter, 
@@ -29,6 +29,32 @@ class SunmiPrinterService {
     }
   }
   
+  // ✅ FIXED: openCashDrawer using direct functions (not SunmiModule)
+  static async openCashDrawer(): Promise<boolean> {
+    try {
+      const initialized = await this.init();
+      if (!initialized) return false;
+      
+      // Try ESC/POS command for cash drawer kick
+      // Most thermal printers support this
+      const drawerCommand = [0x1B, 0x70, 0x00, 0x19, 0xFA];
+      
+      // Check if printRaw is available
+      const { printRaw } = require('sunmi-printer-expo');
+      if (printRaw) {
+        await printRaw(drawerCommand);
+        console.log('✅ Cash drawer opened via ESC/POS');
+        return true;
+      }
+      
+      console.log('⚠️ Cash drawer not supported on this printer');
+      return false;
+    } catch (error) {
+      console.log('❌ Cash drawer error:', error);
+      return false;
+    }
+  }
+  
   // Convert any image URL to Base64
   private static async urlToBase64(url: string): Promise<string> {
     console.log('🔄 Converting URL to Base64:', url);
@@ -49,7 +75,7 @@ class SunmiPrinterService {
     });
   }
   
-  // Print logos (thermal printers can't do side-by-side, so print one after another)
+  // Print logos
   private static async printLogos(companySettings: any): Promise<void> {
     const hasCompanyLogo = companySettings.showCompanyLogo && companySettings.companyLogo;
     const hasHalalLogo = companySettings.showHalalLogo && companySettings.halalLogo;
@@ -104,7 +130,7 @@ class SunmiPrinterService {
     await printText(text);
   }
   
-  // Divider line (full width 32 chars)
+  // Divider line
   private static async divider(char: string = '-'): Promise<void> {
     await printText(char.repeat(32));
   }
@@ -114,7 +140,7 @@ class SunmiPrinterService {
     await printText(char.repeat(32));
   }
   
-  // Two columns (for totals)
+  // Two columns
   private static async twoCols(left: string, right: string): Promise<void> {
     const leftWidth = 20;
     let line = left.substring(0, leftWidth).padEnd(leftWidth, ' ');
@@ -122,7 +148,7 @@ class SunmiPrinterService {
     await printText(line);
   }
   
-  // Four columns for items (ITEM, QTY, PRICE, TOTAL)
+  // Four columns for items
   private static async itemRow(name: string, qty: string, price: string, total: string): Promise<void> {
     const nameWidth = 14;
     const qtyWidth = 4;
@@ -151,18 +177,15 @@ class SunmiPrinterService {
       
       const symbol = companySettings.currencySymbol || '$';
       
-      // ============ HEADER SECTION ============
+      // HEADER SECTION
       await this.doubleDivider('=');
       await lineWrap(1);
       
-      // Print logos
       await this.printLogos(companySettings);
       
-      // Company Name - Large and Bold
       await this.center(companySettings.name || 'YOUR STORE');
       await lineWrap(1);
       
-      // Address
       if (companySettings.address) {
         const addressLines = companySettings.address.split('\n');
         for (const line of addressLines) {
@@ -172,17 +195,14 @@ class SunmiPrinterService {
         }
       }
       
-      // Phone
       if (companySettings.phone) {
         await this.center(`📞 ${companySettings.phone}`);
       }
       
-      // Email
       if (companySettings.email) {
         await this.center(`📧 ${companySettings.email}`);
       }
       
-      // GST Number
       if (companySettings.gstNo) {
         await this.center(`GST: ${companySettings.gstNo}`);
       }
@@ -190,17 +210,16 @@ class SunmiPrinterService {
       await this.doubleDivider('=');
       await lineWrap(1);
       
-      // ============ BILL DETAILS ============
+      // BILL DETAILS
       await this.left(`INVOICE NO: ${saleData.invoiceNumber || saleData.id}`);
       await this.left(`DATE: ${new Date().toLocaleString()}`);
       await this.left(`CASHIER: ${saleData.cashier || companySettings.cashierName || 'Staff'}`);
       await this.divider('-');
       
-      // ============ ITEMS SECTION ============
+      // ITEMS SECTION
       await this.itemHeader();
       await this.divider('-');
       
-      // Items loop
       for (const item of saleData.items || []) {
         const itemName = (item.name || '').substring(0, 12);
         const qty = (item.quantity || 1).toString();
@@ -209,7 +228,6 @@ class SunmiPrinterService {
         
         await this.itemRow(itemName, qty, price, total);
         
-        // Show unit price if quantity > 1
         if (item.quantity > 1) {
           await this.left(`    @ ${symbol}${item.price.toFixed(2)} ea`);
         }
@@ -217,7 +235,7 @@ class SunmiPrinterService {
       
       await this.divider('-');
       
-      // ============ SUBTOTAL & DISCOUNT ============
+      // SUBTOTAL & DISCOUNT
       let subtotal = saleData.total;
       
       if (saleData.discountAmount && saleData.discountAmount > 0) {
@@ -234,7 +252,7 @@ class SunmiPrinterService {
         await this.divider('-');
       }
       
-      // ============ GST ============
+      // GST
       if (companySettings.gstPercentage > 0) {
         const gstAmount = subtotal * (companySettings.gstPercentage / (100 + companySettings.gstPercentage));
         const beforeGst = subtotal - gstAmount;
@@ -243,11 +261,11 @@ class SunmiPrinterService {
         await this.divider('-');
       }
       
-      // ============ GRAND TOTAL ============
+      // GRAND TOTAL
       await this.twoCols('GRAND TOTAL:', `${symbol}${subtotal.toFixed(2)}`);
       await this.doubleDivider('=');
       
-      // ============ PAYMENT ============
+      // PAYMENT
       await this.twoCols('PAYMENT:', saleData.paymentMethod || 'Cash');
       
       if (saleData.cashPaid && saleData.cashPaid > 0) {
@@ -259,10 +277,10 @@ class SunmiPrinterService {
       
       await lineWrap(1);
       
-      // ============ FOOTER ============
+      // FOOTER
       await this.center('THANK YOU! COME AGAIN!');
       await lineWrap(1);
-      await this.center('SMARTHAWKER BY UNIPROSG');
+      await this.center('SMART-POS BY UNIPROSG');
       
       if (companySettings.gstPercentage > 0) {
         await this.center(`* Prices include ${companySettings.gstPercentage}% GST`);

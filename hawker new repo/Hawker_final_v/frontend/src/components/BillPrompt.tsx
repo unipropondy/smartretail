@@ -1,4 +1,4 @@
-// components/BillPrompt.tsx - COMPLETE WITH TRANSLATIONS ✅
+// components/BillPrompt.tsx - NAMMA VERSION (Improved)
 
 import React from 'react';
 import {
@@ -7,10 +7,10 @@ import {
   Modal,
   TouchableOpacity,
   StyleSheet,
+  TouchableWithoutFeedback,  // ✅ ADD for backdrop close
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-// ✅ Define props interface with ALL properties
 interface BillPromptProps {
   visible: boolean;
   onClose: () => void;
@@ -18,13 +18,30 @@ interface BillPromptProps {
   onSkip: () => void;
   theme: any;
   t: any;
-  total: string;
-  formatPrice: (amount: number) => string;  // ✅ Add this
+  total: number | string;  // ✅ Allow both number and string
+  formatPrice?: (amount: number) => string;
 }
 
-const BillPrompt: React.FC<BillPromptProps> = (props) => {
-  // ✅ Include formatPrice in destructuring
-  const { visible, onClose, onPrintBill, onSkip, theme, t, total, formatPrice } = props;
+const BillPrompt: React.FC<BillPromptProps> = ({
+  visible,
+  onClose,
+  onPrintBill,
+  onSkip,
+  theme,
+  t,
+  total,
+  formatPrice
+}) => {
+  // ✅ Safe total calculation
+  const totalAmount = typeof total === 'string' ? parseFloat(total) : total;
+  const displayTotal = formatPrice 
+    ? formatPrice(totalAmount || 0) 
+    : `$${(totalAmount || 0).toFixed(2)}`;
+
+  // ✅ Close modal when tapping backdrop
+  const handleBackdropPress = () => {
+    onClose();
+  };
 
   return (
     <Modal
@@ -33,59 +50,61 @@ const BillPrompt: React.FC<BillPromptProps> = (props) => {
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-          
-          {/* Icon */}
-          <View style={[styles.iconContainer, { backgroundColor: theme.primary + '20' }]}>
-            <Ionicons name="receipt-outline" size={50} color={theme.primary} />
-          </View>
-          
-          {/* Title */}
-          <View>
-            <Text style={[styles.title, { color: theme.text }]}>
-              {t.printBillReceipt}
-            </Text>
-          </View>
-          
-          {/* Amount - using formatPrice */}
-          <Text style={[styles.amount, { color: theme.primary }]}>
-            {t.totalAmount}: {formatPrice(parseFloat(total))}  {/* ✅ Now works! */}
-          </Text>
-          
-          {/* Message */}
-          <Text style={[styles.message, { color: theme.textSecondary }]}>
-            {t.printBillMessage || 'Do you want to print a bill for this transaction?'}
-          </Text>
-          
-          {/* Buttons */}
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.button, styles.skipButton, { borderColor: theme.border }]}
-              onPress={onSkip}
-            >
-              <Text style={[styles.buttonText, { color: theme.text }]}>
-                {t.skipBill || 'No, Skip'}
+      <TouchableWithoutFeedback onPress={handleBackdropPress}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.modalContent, { backgroundColor: theme.card || theme.bgCard || '#fff' }]}>
+              
+              {/* Icon */}
+              <View style={[styles.iconContainer, { backgroundColor: (theme.primary || '#000') + '20' }]}>
+                <Ionicons name="receipt-outline" size={50} color={theme.primary || '#000'} />
+              </View>
+              
+              {/* Title */}
+              <Text style={[styles.title, { color: theme.text || theme.textPrimary || '#000' }]}>
+                {t.printBillReceipt || 'Print Receipt?'}
               </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.button, styles.printButton, { backgroundColor: theme.primary }]}
-              onPress={onPrintBill}
-            >
-              <Text style={[styles.buttonText, { color: '#fff' }]}>
-                {t.printBill || 'Yes, Print Bill'}
+              
+              {/* Amount */}
+              <Text style={[styles.amount, { color: theme.primary || '#000' }]}>
+                {t.totalAmount || 'Total'}: {displayTotal}
               </Text>
-            </TouchableOpacity>
-          </View>
-          
-          {/* Note */}
-          <Text style={[styles.note, { color: theme.textSecondary }]}>
-            {t.billNote || 'You can also view bill in Sales Report'}
-          </Text>
-          
+              
+              {/* Message */}
+              <Text style={[styles.message, { color: theme.textSecondary || '#666' }]}>
+                {t.printBillMessage || 'Do you want to print a bill for this transaction?'}
+              </Text>
+              
+              {/* Buttons */}
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity
+                  style={[styles.button, styles.skipButton, { borderColor: theme.border || '#ccc' }]}
+                  onPress={onSkip}
+                >
+                  <Text style={[styles.buttonText, { color: theme.text || theme.textPrimary || '#000' }]}>
+                    {t.skipBill || 'No, Skip'}
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.button, styles.printButton, { backgroundColor: theme.primary || '#000' }]}
+                  onPress={onPrintBill}
+                >
+                  <Text style={[styles.buttonText, { color: '#fff' }]}>
+                    {t.printBill || 'Yes, Print Bill'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              {/* Note */}
+              <Text style={[styles.note, { color: theme.textSecondary || '#666' }]}>
+                {t.billNote || 'You can also view bill in Sales Report'}
+              </Text>
+              
+            </View>
+          </TouchableWithoutFeedback>
         </View>
-      </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 };

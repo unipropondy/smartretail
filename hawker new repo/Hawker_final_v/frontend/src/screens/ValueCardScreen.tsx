@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import API from '../api';
-
+import { useCurrency } from '../context/CurrencyContext';
 interface Member {
     Id: number;
     Name: string;
@@ -53,7 +53,7 @@ const ValueCardScreen: React.FC<ValueCardScreenProps> = ({ visible, onClose, the
     const [topupAmount, setTopupAmount] = useState('');
     const [topupNotes, setTopupNotes] = useState('');
     const [topupLoading, setTopupLoading] = useState(false);
-    
+    const { formatPrice, currencySymbol } = useCurrency();
     const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
     const [cardValue, setCardValue] = useState('');
     const [serviceValue, setServiceValue] = useState('');
@@ -186,9 +186,9 @@ const ValueCardScreen: React.FC<ValueCardScreenProps> = ({ visible, onClose, the
         setShowHistory(true);
     };
 
-    const formatCurrency = (amount: number) => {
-        return `₹${(amount || 0).toFixed(2)}`;
-    };
+   const formatCurrency = (amount: number) => {
+    return `${currencySymbol}${(amount || 0).toFixed(2)}`;
+};
 
     const formatDate = (dateString: string) => {
         if (!dateString) return 'N/A';
@@ -394,7 +394,8 @@ const ValueCardScreen: React.FC<ValueCardScreenProps> = ({ visible, onClose, the
                                 </View>
                             )}
 
-                            <Text style={[styles.fullScreenLabel, { color: theme.textSecondary }]}>Card Value (₹) *</Text>
+                            <Text style={[styles.fullScreenLabel, { color: theme.textSecondary }]}>Card Value ({currencySymbol}) *
+</Text>
                             <TextInput
                                 style={[styles.fullScreenInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                 placeholder="Enter card value (e.g., 500)"
@@ -404,7 +405,7 @@ const ValueCardScreen: React.FC<ValueCardScreenProps> = ({ visible, onClose, the
                                 onChangeText={setCardValue}
                             />
 
-                            <Text style={[styles.fullScreenLabel, { color: theme.textSecondary }]}>Service Value (₹)</Text>
+                            <Text style={[styles.fullScreenLabel, { color: theme.textSecondary }]}>Service Value ({currencySymbol}) *</Text>
                             <TextInput
                                 style={[styles.fullScreenInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                 placeholder="Enter service/bonus value (optional)"

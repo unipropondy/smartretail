@@ -37,6 +37,9 @@ import CashDrawerLogs from '../components/CashDrawerLogs';
 import MemberScreen from './MemberScreen';
 import ValueCardScreen from './ValueCardScreen';
 import ValueCardPaymentModal from '../components/ValueCardPaymentModal';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { ZoomIn } from 'react-native-reanimated';
+import SettlementReport from '../components/SettlementReport';
 // Add these missing imports at the top with your other imports
 import {
   TextInput,
@@ -51,6 +54,7 @@ import { OutletSelector } from '../components/OutletSelector';
 // Import constants and utils
 import { themes } from '../utils/themes';
 import { translations, dishNameTranslations } from '../utils/translations';
+import { processYeahPayCardPayment, processYeahPayPayNowPayment } from '../../services/yeahpayService';
 
 import { MenuItem } from '../types';
 // Add this to track all API calls
@@ -98,9 +102,11 @@ const safeJSONParse = (data: any): any => {
   }
 };
 const { width } = Dimensions.get('window');
+
 // At the VERY TOP of file (after imports, before PosScreen component)
 // ========== RENDER CONTENT FUNCTION - OUTSIDE COMPONENT ==========
 // ========== RENDER CONTENT FUNCTION - OUTSIDE COMPONENT ==========
+let renderContentCallCount = 0;
 const renderContentByLayer = ({
     currentLayer,
     departments,
@@ -131,9 +137,15 @@ const renderContentByLayer = ({
     handleCategorySelect,
     setShowDepartmentSelector,
     is3LayerMode,
-    is2LayerMode
+    is2LayerMode,
+    cartWidth,  // ✅ ADD THIS
+    width,
 }: any) => {
-    
+     renderContentCallCount++;
+  if (renderContentCallCount > 5) {
+    console.log('⚠️ renderContentByLayer called too many times!');
+    // Still render but log warning
+  }
     console.log('🎨 renderContentByLayer called with currentLayer:', currentLayer);
     console.log('📦 departments:', departments.length);
     console.log('📌 Mode - 3 Layers:', is3LayerMode, '2 Layers:', is2LayerMode);
@@ -164,27 +176,74 @@ const renderContentByLayer = ({
                     </Text>
                 </View>
             ) : (
-                <View style={styles.deptGrid}>
-                    {departments.map((dept: any, idx: number) => (
-                        <TouchableOpacity
-                            key={dept.Id}
-                            style={[styles.departmentCard, { 
-                                backgroundColor: currentTheme.card, 
-                                borderColor: currentTheme.border 
-                            }]}
-                            onPress={() => handleDepartmentSelect(dept.Id, dept.Name)}
-                        >
-                            <View style={styles.deptInfo}>
-                                <Text style={[styles.deptName, { color: currentTheme.text, backgroundColor: 'transparent' }]}>
-                                    {dept.Name}
-                                </Text>
-                                <Text style={[styles.deptCount, { color: currentTheme.textSecondary }]}>
-                                    Tap to view →
-                                </Text>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
-                </View>
+              <View style={styles.deptGrid}>
+    {departments.map((dept: any, idx: number) => (
+        <Animated.View 
+            key={dept.Id}
+            entering={ZoomIn.delay(idx * 100).springify()}
+            style={{ width: '28%', marginBottom: 16, marginRight: '3%' }}
+        >
+            <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => handleDepartmentSelect(dept.Id, dept.Name)}
+                
+            >
+                <LinearGradient
+                    colors={[currentTheme.card, currentTheme.surface]}
+                    style={{
+                        borderRadius: 24,
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: currentTheme.border,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 8 },
+                        shadowOpacity: 0.08,
+                        shadowRadius: 16,
+                        elevation: 4,
+                        alignItems: 'center',
+                    }}
+                >
+                    {/* Icon Circle with Gradient */}
+<LinearGradient
+    colors={currentTheme.gradient || [currentTheme.primary, currentTheme.secondary]}
+    style={{
+        width: 55,
+        height: 55,
+        borderRadius: 27.5,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 12,
+    }}
+>
+    <Ionicons name="storefront-outline" size={28} color="#fff" />
+</LinearGradient>
+                    
+                    {/* Department Name */}
+                    <Text style={{
+                        fontSize: 15,
+                        fontWeight: '700',
+                        color: currentTheme.text,
+                        textAlign: 'center',
+                        marginBottom: 4,
+                    }}>
+                        {dept.Name}
+                    </Text>
+                    
+                    {/* Stats */}
+                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={{
+                    fontSize: 11,
+                    color: currentTheme.textSecondary,
+                }}>
+                    Tap to view 
+                </Text>
+                        <Ionicons name="arrow-forward" size={12} color={currentTheme.primary} />
+                    </View>
+                </LinearGradient>
+            </TouchableOpacity>
+        </Animated.View>
+    ))}
+</View>
             )}
             
             {/* ✅ Add Manage Departments button inside ScrollView, not outside */}
@@ -199,6 +258,10 @@ const renderContentByLayer = ({
 if (currentLayer === 'category') {
     const validCategories = categories.filter(cat => cat && typeof cat === 'string' && cat.trim() !== '');
     
+    // ✅ Check if cart is visible (has items)
+    const isCartVisible =cart.length > 0;
+    const cardWidth = isCartVisible ? '45%' : '48%';  // Cart open na 45%, close na 48%
+    
     return (
         <ScrollView 
             style={{ flex: 1, backgroundColor: currentTheme.background }}
@@ -212,34 +275,79 @@ if (currentLayer === 'category') {
                     </Text>
                 </View>
             ) : (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 }}>
                     {validCategories.map((cat: string, index: number) => (
+                      <Animated.View
+                      key={`category-${cat}-${index}`}
+    entering={ZoomIn.delay(index * 50).springify()}
+    style={{ width: cardWidth, marginBottom: 16 }}
+>
                         <TouchableOpacity
-                            key={`cat-${cat}-${index}`}
-                            style={{
-                                width: '48%',
-                                padding: 16,
-                                borderRadius: 12,
-                                borderWidth: 1,
-                                backgroundColor: currentTheme.card,
-                                borderColor: currentTheme.border,
-                                alignItems: 'center',
-                                flexDirection: 'row'
-                            }}
-                            onPress={() => handleCategorySelect(cat)}
-                        >
-                            <View style={styles.catIconContainer}>
-                                <Text style={styles.catIcon}>📁</Text>
-                            </View>
-                            <View style={styles.catInfo}>
-                                <Text style={[styles.catName, { color: currentTheme.text }]}>
-                                    {cat}
-                                </Text>
-                                <Text style={[styles.catCount, { color: currentTheme.textSecondary }]}>
-                                    {menuItems.filter((i: any) => i.displayCategory === cat).length} Items
-                                </Text>
-                            </View>
-                        </TouchableOpacity>
+    
+     activeOpacity={0.9}
+        style={{
+            borderRadius: 20,
+            overflow: 'hidden',
+            backgroundColor: currentTheme.card,
+            borderWidth: 1,
+            borderColor: currentTheme.border,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.05,
+            shadowRadius: 12,
+            elevation: 2,
+        }}
+        onPress={() => handleCategorySelect(cat)}
+    >
+        <LinearGradient
+            colors={[currentTheme.card, currentTheme.surface]}
+            style={{
+                padding: 16,
+                alignItems: 'center',
+            }}
+        >
+            {/* Icon Circle */}
+            <View style={{
+                width: 55,
+                height: 55,
+                borderRadius: 27,
+                backgroundColor: currentTheme.primary + '15',
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginBottom: 12,
+            }}>
+                <Text style={{ fontSize: 26 }}>📁</Text>
+            </View>
+            
+            {/* Category Name */}
+            <Text style={{
+                fontSize: 14,
+                fontWeight: '600',
+                color: currentTheme.text,
+                textAlign: 'center',
+                marginBottom: 6,
+            }}>
+                {cat}
+            </Text>
+            
+            {/* Item Count Badge */}
+            <View style={{
+                backgroundColor: currentTheme.primary + '10',
+                paddingHorizontal: 12,
+                paddingVertical: 4,
+                borderRadius: 20,
+            }}>
+                <Text style={{
+                    fontSize: 11,
+                    color: currentTheme.primary,
+                    fontWeight: '500',
+                }}>
+                    {menuItems.filter((i: any) => i.displayCategory === cat).length} Items
+                </Text>
+            </View>
+        </LinearGradient>
+    </TouchableOpacity>
+</Animated.View>
                     ))}
                 </View>
             )}
@@ -271,6 +379,16 @@ if (currentLayer === 'category') {
     );
 };
 export default function PosScreen() {
+  const renderCount = useRef(0);
+useEffect(() => {
+  renderCount.current++;
+  console.log(`🔁 PosScreen render #${renderCount.current}`);
+});
+
+// If renderCount goes above 10, something is wrong
+if (renderCount.current > 20) {
+  console.log('⚠️ Infinite loop detected!');
+}
   const { theme: savedTheme, language: savedLanguage, setTheme: setSettingsTheme, setLanguage: setSettingsLanguage, companySettings } = useSettings();
     const { formatPrice, loadCurrencyFromSettings, refreshCurrency  } = useCurrency();  
   
@@ -288,6 +406,8 @@ const [showUPISettings, setShowUPISettings] = useState(false);
   const validLanguage = savedLanguage && translations[savedLanguage] ? savedLanguage : 'en';
   const [formActive, setFormActive] = useState(true);  // ✅ This is missing!
 const [loading, setLoading] = useState(false);   
+const [showSettlement, setShowSettlement] = useState(false);
+const departmentsLoadedRef = useRef(false);
   const [menuRefreshKey, setMenuRefreshKey] = useState(0);
   const [theme, setTheme] = useState<string>(savedTheme || 'light');
   const [language, setLanguage] = useState<string>(validLanguage);
@@ -309,6 +429,7 @@ const [valueCardAmount, setValueCardAmount] = useState(0);
 const [valueCardDetails, setValueCardDetails] = useState<any>(null);
 const [valueCardRemaining, setValueCardRemaining] = useState<number | null>(null);
 const [valueCardUsedAmount, setValueCardUsedAmount] = useState(0);
+const [printing, setPrinting] = useState(false);
 // Add these state variables
 const [discountEnabled, setDiscountEnabled] = useState(false);
 const [showDiscountModal, setShowDiscountModal] = useState(false);
@@ -324,6 +445,7 @@ const is2LayerMode = layerConfig.layers === 2;
   item: null as any,
   price: ''
 });
+const isLoadingDepartmentsRef = useRef(false);
 const [currentLayer, setCurrentLayer] = useState<'department' | 'category' | 'item'>('department');
 const [selectedDepartment, setSelectedDepartment] = useState<{ id: number; name: string } | null>(null);
 const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -347,7 +469,8 @@ const dataLoadedRef = useRef({
   paymentModes: false,
   upiId: false,
   payNow: false,
-  currency: false
+  currency: false,
+  departments: false
 });
 const currencyRefreshedRef = useRef(false);
 const apiCallInProgress = useRef({
@@ -356,8 +479,13 @@ const apiCallInProgress = useRef({
   paymentModes: false,
   upiId: false,
   payNow: false,
-  currency: false
+  currency: false,
+  departments: false
 });
+const isLoadingDepartments = useRef(false);
+const departmentsLoaded = useRef(false);
+const isLoadingData = useRef(false);
+const dataLoaded = useRef(false);
 const loadingRef = useRef(false);
 useEffect(() => {
     // This will run only once to stabilize the component
@@ -442,7 +570,15 @@ useEffect(() => {
         })
       );
     }
-    
+     if (!dataLoadedRef.current.departments && !apiCallInProgress.current.departments) {
+    apiCallInProgress.current.departments = true;
+    promises.push(
+      loadDepartments().then(() => {
+        dataLoadedRef.current.departments = true;
+        apiCallInProgress.current.departments = false;
+      })
+    );
+  }
     await Promise.all(promises);
     dataLoadedRef.current.initial = true;
     console.log('✅ All data loaded in parallel!');
@@ -475,13 +611,36 @@ const deviceType = useMemo(() => {
 
 const orientation = width > height ? 'landscape' : 'portrait';
 // Dynamic cart width based on orientation
+// Find your cartWidth useMemo (around line 250-300)
 const cartWidth = useMemo(() => {
-    if (orientation === 'landscape') {
-        return 380;  // Landscape: wider cart
-    } else {
-        return 260;  // Portrait: narrower cart
+    const isMobile = width < 768;
+    const isTablet = width >= 768 && width < 1024;
+    
+    // ✅ Category layer - SMALLER percentage
+    if (currentLayer === 'category') {
+        if (orientation === 'landscape') {
+            if (isMobile) return width * 0.25;    // 25% of screen
+            if (isTablet) return width * 0.3;     // 20% of screen
+            return width * 0.18;                  // 18% of screen
+        } else {
+            if (isMobile) return width * 0.39;    // 35% of screen (was 45%)
+            if (isTablet) return width * 0.3;     // 30% of screen
+            return width * 0.25;                  // 25% of screen
+        }
     }
-}, [orientation]);
+    
+    // ✅ Item layer - NORMAL percentage
+    if (orientation === 'landscape') {
+        if (isMobile) return width * 0.35;    // 35% of screen
+        if (isTablet) return width * 0.3;     // 30% of screen
+        return width * 0.25;                  // 25% of screen
+    } else {
+        if (isMobile) return width * 0.45;    // 45% of screen
+        if (isTablet) return width * 0.4;     // 40% of screen
+        return width * 0.35;                  // 35% of screen
+    }
+}, [orientation, width, currentLayer]);
+
 const menuColumns = useMemo(() => {
     if (orientation === 'landscape') {
         if (width < 768) return 4;
@@ -583,7 +742,7 @@ useEffect(() => {
   const t = translations[language] || translations.en;
   
  const [categories, setCategories] = useState<string[]>([]);
-  const companyLogo = require('../../assets/images/smarthawker icon final.png');
+  const companyLogo = require('../../assets/images/smartretail.png');
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage] = useState<number>(8);
@@ -900,8 +1059,10 @@ useEffect(() => {
 // Add this useEffect
 useEffect(() => {
     console.log('🔍 outletInfo changed:', outletInfo);
+    if (outletInfo?.id) {
+        console.log('✅ Outlet ID found:', outletInfo.id);
+    }
 }, [outletInfo]);
-
 useEffect(() => {
     console.log('🔍 selectedOutlet changed:', selectedOutlet);
 }, [selectedOutlet]);
@@ -927,31 +1088,41 @@ const handlePaymentModesUpdate = (modes: PaymentMode[]) => {
     loadPaymentModes(true);
   }, 500);
 };
-useEffect(() => {
-    loadDepartments();
-}, []);
+
 
 const loadDepartments = async () => {
-    try {
-        const outletId = await AsyncStorage.getItem('selectedOutletId');
-        console.log('🏪 Current outlet ID:', outletId);
-        
-        const response = await API.get('/departments', {
-            params: { outletId: outletId }
-        });
-        
-        console.log('📦 All departments response:', response.data);
-        
-        const activeDepartments = (response.data || []).filter(dept => dept.IsActive === true);
-        console.log('✅ Active departments:', activeDepartments.length);
-        
-        setDepartments(activeDepartments);
-        return activeDepartments;  // ✅ Return the data
-    } catch (error) {
-        console.log('❌ Error loading departments:', error);
-        setDepartments([]);
-        return [];
-    }
+  // ✅ Prevent multiple calls
+  if (departmentsLoadedRef.current || isLoadingDepartmentsRef.current) {
+    console.log('⏭️ Departments already loaded, skipping...');
+    return;
+  }
+  
+  isLoadingDepartmentsRef.current = true;
+  
+  try {
+    const outletId = await AsyncStorage.getItem('selectedOutletId');
+    console.log('🏪 Current outlet ID:', outletId);
+    
+    const response = await API.get('/departments', {
+      params: { outletId: outletId }
+    });
+    
+    console.log('📦 All departments response:', response.data);
+    
+    const activeDepartments = (response.data || []).filter(dept => dept.IsActive === true);
+    console.log('✅ Active departments:', activeDepartments.length);
+    
+    setDepartments(activeDepartments);
+    departmentsLoadedRef.current = true;
+    return activeDepartments;
+    
+  } catch (error) {
+    console.log('❌ Error loading departments:', error);
+    setDepartments([]);
+    return [];
+  } finally {
+    isLoadingDepartmentsRef.current = false;
+  }
 };
 const loadCategoriesByDepartment = async (deptId: number) => {
     try {
@@ -2310,9 +2481,79 @@ const handleCheckout = (): void => {
     );
   }
 };
+useEffect(() => {
+    const loadYeahPaySettings = async () => {
+        try {
+            const outletId = await AsyncStorage.getItem('selectedOutletId');
+            console.log('🏪 Loading YeahPay for outlet:', outletId);
+            
+            if (!outletId) {
+                console.log('⚠️ No outlet selected');
+                return;
+            }
+            
+            const response = await API.get(`/outlet/yeahpay-settings/${outletId}`);
+            console.log('📥 YeahPay API Response:', response.data);
+            
+            // ✅ Save to AsyncStorage properly
+            if (response.data && response.data.enabled === true) {
+                await AsyncStorage.setItem('yeahpay_enabled', 'true');
+                await AsyncStorage.setItem('yeahpay_device_sn', response.data.deviceSn || '');
+                await AsyncStorage.setItem('yeahpay_salt', response.data.salt || '');
+                console.log('✅ YeahPay ENABLED - Saved to storage');
+                console.log('  - Device SN:', response.data.deviceSn);
+                console.log('  - Salt:', response.data.salt);
+                
+                // ✅ Verify save
+                const verifyEnabled = await AsyncStorage.getItem('yeahpay_enabled');
+                const verifySn = await AsyncStorage.getItem('yeahpay_device_sn');
+                console.log('🔍 Verification - enabled:', verifyEnabled, 'sn:', verifySn);
+            } else {
+                await AsyncStorage.setItem('yeahpay_enabled', 'false');
+                console.log('❌ YeahPay DISABLED for this outlet');
+            }
+        } catch (error) {
+            console.log('❌ Error loading YeahPay:', error);
+            await AsyncStorage.setItem('yeahpay_enabled', 'false');
+        }
+    };
+    
+    loadYeahPaySettings();
+}, [outletInfo?.id]);
 // Update handlePaymentSelect
 // In PosScreen.tsx, update handlePaymentSelect function
+// Add this function in PosScreen component
+const loadYeahPaySettings = async () => {
+    try {
+        const outletId = await AsyncStorage.getItem('selectedOutletId');
+        console.log('📡 Loading YeahPay settings for outlet:', outletId);
+        
+        if (!outletId) {
+            console.log('⚠️ No outlet selected');
+            return;
+        }
+        
+        const response = await API.get(`/outlet/yeahpay-settings/${outletId}`);
+        console.log('📥 YeahPay settings response:', response.data);
+        
+        if (response.data && response.data.enabled) {
+            await AsyncStorage.setItem('yeahpay_device_sn', response.data.deviceSn || '');
+            await AsyncStorage.setItem('yeahpay_salt', response.data.salt || '');
+            await AsyncStorage.setItem('yeahpay_enabled', 'true');
+            console.log('✅ YeahPay ENABLED for this outlet');
+            console.log('📱 Device SN:', response.data.deviceSn);
+        } else {
+            await AsyncStorage.setItem('yeahpay_enabled', 'false');
+            console.log('❌ YeahPay DISABLED for this outlet');
+        }
+    } catch (error) {
+        console.log('❌ Error loading YeahPay settings:', error);
+        await AsyncStorage.setItem('yeahpay_enabled', 'false');
+    }
+};
 
+// Call this when outlet is selected
+// Load YeahPay settings when outlet is selected or app loads // Re-run when outlet changes
 const handlePaymentSelect = async (payment: any): Promise<void> => {
   // ✅ Use remaining amount if value card was used, otherwise original total
   const totalAmount = valueCardRemaining !== null 
@@ -2325,7 +2566,194 @@ const handlePaymentSelect = async (payment: any): Promise<void> => {
     totalAmount,
     isSecondPayment: valueCardRemaining !== null
   });
-  
+  // ✅ YEAHPAY CARD PAYMENT - Direct API call
+// ✅ YEAHPAY CARD PAYMENT
+if (payment.name === 'Yeahpay Card' || payment.id === 'mode_1780572442855_syh829us4') {
+    console.log('💳 YeahPay Card selected');
+    
+    const totalAmount = valueCardRemaining !== null ? valueCardRemaining : parseFloat(calculateTotal());
+    const outletId = await AsyncStorage.getItem('selectedOutletId');
+    
+    if (!outletId) {
+        Alert.alert('Error', 'No outlet selected');
+        return;
+    }
+    
+    setProcessingPayment(true);
+    setSelectedPayment(payment);
+    
+    try {
+        const settingsResponse = await API.get(`/outlet/yeahpay-settings/${outletId}`);
+        console.log('📥 Full settings response:', JSON.stringify(settingsResponse.data, null, 2));
+        console.log('📥 RAW response:', settingsResponse);
+console.log('📥 DATA:', settingsResponse.data);
+console.log('📥 enabled value:', settingsResponse.data.enabled);
+console.log('📥 enabled type:', typeof settingsResponse.data.enabled);
+        // ✅ Check both 'enabled' and 'YeahPayEnabled' fields
+        const isEnabled = !!settingsResponse.data.deviceSn;
+console.log('🔍 isEnabled (based on deviceSn):', isEnabled);
+        
+        console.log('🔍 isEnabled:', isEnabled);
+        console.log('🔍 deviceSn:', settingsResponse.data.deviceSn);
+        console.log('🔍 salt:', settingsResponse.data.salt);
+        
+        if (!isEnabled) {
+            Alert.alert('YeahPay Not Configured', 'Terminal not configured for this outlet');
+            setProcessingPayment(false);
+            return;
+        }
+        
+        const deviceSn = settingsResponse.data.deviceSn;
+        const salt = settingsResponse.data.salt;
+        
+        if (!deviceSn || !salt) {
+            Alert.alert('YeahPay Not Configured', 'Device SN or Salt missing');
+            setProcessingPayment(false);
+            return;
+        }
+        
+        console.log('📡 Calling YeahPay API with:', { amount: totalAmount, deviceSn });
+        
+        const result = await processYeahPayCardPayment(totalAmount, deviceSn, salt);
+        console.log('YeahPay result:', result);
+        
+        if (result.success) {
+            const saleData = {
+                total: totalAmount,
+                paymentMethod: 'YeahPay Card',
+                items: cart.map(item => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    price: item.price,
+                    category: item.displayCategory || 'Uncategorized'
+                })),
+                cashier: user?.username || 'Admin',
+                outletId: outletId,
+                discountType: discountInfo.type,
+                discountValue: discountInfo.value,
+                discountAmount: discountInfo.amount
+            };
+            
+            const saleResponse = await API.post('/sales', saleData);
+            
+            setPendingSaleData({
+                ...saleData,
+                id: saleResponse.data.id,
+                invoiceNumber: saleResponse.data.invoiceNumber
+            });
+            
+            setPaymentSuccess(true);
+            setTimeout(() => {
+                setPaymentSuccess(false);
+                setShowPaymentModal(false);
+                setProcessingPayment(false);
+                setCart([]);
+                setShowBillPrompt(true);
+                setDiscountInfo({
+                    applied: false, type: 'percentage', value: 0, amount: 0,
+                    originalTotal: 0, finalTotal: 0
+                });
+                setValueCardRemaining(null);
+                setValueCardUsedAmount(0);
+                setValueCardDetails(null);
+            }, 1500);
+        } else {
+            Alert.alert('Payment Failed', result.msg || 'YeahPay transaction failed');
+            setProcessingPayment(false);
+        }
+    } catch (error) {
+        console.log('YeahPay error:', error);
+        Alert.alert('Error', 'Payment failed: ' + error.message);
+        setProcessingPayment(false);
+    }
+    return;
+}
+
+// ✅ YEAHPAY PAYNOW PAYMENT
+// ✅ YEAHPAY PAYNOW PAYMENT
+if (payment.name?.toLowerCase().includes('paynow') && 
+    payment.name?.toLowerCase().includes('yeahpay')) {
+    
+    console.log('📱 YeahPay PayNow selected - Name:', payment.name);
+    
+    const totalAmount = valueCardRemaining !== null ? valueCardRemaining : parseFloat(calculateTotal());
+    const outletId = await AsyncStorage.getItem('selectedOutletId');
+    
+    if (!outletId) {
+        Alert.alert('Error', 'No outlet selected');
+        return;
+    }
+    
+    setProcessingPayment(true);
+    setSelectedPayment(payment);
+    
+    try {
+        const settingsResponse = await API.get(`/outlet/yeahpay-settings/${outletId}`);
+        
+        if (!settingsResponse.data || !settingsResponse.data.enabled) {
+            Alert.alert('YeahPay Not Configured', 'Terminal not configured for this outlet');
+            setProcessingPayment(false);
+            return;
+        }
+        
+        const deviceSn = settingsResponse.data.deviceSn;
+        const salt = settingsResponse.data.salt;
+        
+        console.log('📡 Calling YeahPay PayNow API...');
+        const result = await processYeahPayPayNowPayment(totalAmount, deviceSn, salt);
+        console.log('PayNow result:', result);
+        
+        if (result.success) {
+            const saleData = {
+                total: totalAmount,
+                paymentMethod: payment.name,
+                items: cart.map(item => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    price: item.price,
+                    category: item.displayCategory || 'Uncategorized'
+                })),
+                cashier: user?.username || 'Admin',
+                outletId: outletId,
+                discountType: discountInfo.type,
+                discountValue: discountInfo.value,
+                discountAmount: discountInfo.amount
+            };
+            
+            const saleResponse = await API.post('/sales', saleData);
+            
+            setPendingSaleData({
+                ...saleData,
+                id: saleResponse.data.id,
+                invoiceNumber: saleResponse.data.invoiceNumber
+            });
+            
+            setPaymentSuccess(true);
+            setTimeout(() => {
+                setPaymentSuccess(false);
+                setShowPaymentModal(false);
+                setProcessingPayment(false);
+                setCart([]);
+                setShowBillPrompt(true);
+                setDiscountInfo({
+                    applied: false, type: 'percentage', value: 0, amount: 0,
+                    originalTotal: 0, finalTotal: 0
+                });
+                setValueCardRemaining(null);
+                setValueCardUsedAmount(0);
+                setValueCardDetails(null);
+            }, 1500);
+        } else {
+            Alert.alert('Payment Failed', result.msg || 'YeahPay PayNow failed');
+            setProcessingPayment(false);
+        }
+    } catch (error) {
+        console.log('YeahPay error:', error);
+        Alert.alert('Error', 'Payment failed');
+        setProcessingPayment(false);
+    }
+    return;
+}
   // ✅ Cash payment
   if (payment.name === t.cash) {
     // If this is second payment after value card, pass remaining amount
@@ -3694,14 +4122,17 @@ const handlePrintBill = async () => {
   } : undefined;
   
   console.log('🔴 STEP 5: discountData =', discountData);
-  
+   setPrinting(true);
+  // ✅ NEW: Get printer settings from AsyncStorage or API
   try {
     console.log('🔴 STEP 6: Calling UniversalPrinter.smartPrint...');
     const printed = await UniversalPrinter.smartPrint(
       pendingSaleData,
       outletId,
       t,
-      discountData
+      discountData,
+      'network',
+      false
     );
     
     console.log('🔴 STEP 7: smartPrint result =', printed);
@@ -3712,7 +4143,6 @@ const handlePrintBill = async () => {
       setPendingSaleData(null);
       setCart([]);
       
-      // ✅ Reset discount
       setDiscountInfo({
         applied: false,
         type: 'percentage',
@@ -3722,7 +4152,6 @@ const handlePrintBill = async () => {
         finalTotal: 0
       });
       
-      // ✅✅✅ RESET VALUE CARD STATES ✅✅✅
       setValueCardRemaining(null);
       setValueCardUsedAmount(0);
       setValueCardDetails(null);
@@ -3730,15 +4159,24 @@ const handlePrintBill = async () => {
       Alert.alert('✅ Success', 'Bill printed successfully!');
     } else {
       console.log('❌ Print returned false');
-      Alert.alert('⚠️ Warning', 'Print failed, but sale is saved');
+      Alert.alert(
+        '⚠️ Warning', 
+        'Could not print. Bill saved as PDF. You can share or print later.',
+        [{ text: 'OK' }]
+      );
     }
     
   } catch (error) {
     console.log('❌ Print error:', error);
-    Alert.alert('Error', 'Failed to print bill: ' + (error?.message || 'Unknown error'));
+    Alert.alert(
+      '⚠️ Print Failed', 
+      'Unable to print. Bill saved as PDF. You can share it via WhatsApp or email.',
+      [{ text: 'OK' }]
+    );
+  } finally {
+    setPrinting(false);
   }
 };
-
 const testSunmiConnection = async () => {
   try {
     console.log('🔍 Testing Sunmi printer...');
@@ -3974,7 +4412,7 @@ const testSunmiConnection = async () => {
           />
         </View>
         <Text style={[styles.companyName, { color: currentTheme.text }]}>
-          SMART HAWKER BY UNIPROSG
+          SMART RETAIL BY UNIPROSG
         </Text>
       </View>
 
@@ -4479,15 +4917,24 @@ const renderCashModal = () => {
 )}
 </View>
         
-        <View style={styles.headerRight}>
-          <TouchableOpacity 
-            style={styles.menuButton}
-            onPress={() => setMenuVisible(true)}
-          >
-            <Entypo name="menu" size={24} color={currentTheme.headerText} />
-          </TouchableOpacity>
-        </View>
-      </View>
+       <TouchableOpacity 
+    style={styles.endSalesButton}
+    onPress={() => setShowSettlement(true)}
+  >
+    <Ionicons name="cash-outline" size={20} color={currentTheme.headerText} />
+    
+  </TouchableOpacity>
+  
+  {/* 4️⃣ FAR RIGHT - Menu (3 lines) Button */}
+  <TouchableOpacity 
+    style={styles.menuButton}
+    onPress={() => setMenuVisible(true)}
+  >
+    <Entypo name="menu" size={24} color={currentTheme.headerText} />
+  </TouchableOpacity>
+  
+</View>
+
 
       {/* Categories */}
 {/* 3-Layer Navigation Header */}
@@ -4933,6 +5380,17 @@ const renderCashModal = () => {
         t={t}
     />
 )}
+<SettlementReport
+  visible={showSettlement}
+  onClose={() => setShowSettlement(false)}
+  outletId={outletInfo?.id}
+  outletName={outletInfo?.name}
+  cashierName={user?.username}
+  theme={currentTheme}
+  t={t}
+  formatPrice={formatPrice}
+/>
+
       {/* Profile Modal */}
       <ProfileModal
         visible={showProfileModal}
@@ -5092,16 +5550,15 @@ const styles = StyleSheet.create({
   container: { 
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    
-    alignItems: 'center',
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    minHeight: 60,
-  },
+header: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  paddingHorizontal: 16,
+  paddingVertical: 12,
+  borderBottomWidth: 1,
+  minHeight: 60,
+},
   // Full Screen Price Modal Styles
 fullScreenPriceModal: {
   flex: 1,
@@ -5229,14 +5686,13 @@ headerLeft: {
   width: 80,  // Fixed width for left side
   alignItems: 'flex-start',
 },
-  homeButton: { 
-    marginRight: 16, 
-    padding: 8,
-    minWidth: 44,
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+ homeButton: {
+  padding: 8,
+  minWidth: 44,
+  minHeight: 44,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
   homeButtonText: { 
     fontSize: 22,
     includeFontPadding: false,
@@ -5252,29 +5708,29 @@ headerLeft: {
     fontSize: 22,
     includeFontPadding: false,
   },
-headerCenter: { 
-  flex: 1,  // Takes remaining space
-  alignItems: 'center',     // ✅ Centers horizontally
-  justifyContent: 'center', // ✅ Centers vertically
+headerCenter: {
+  flex: 1,
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginLeft:30,
 },
  headerRight: { 
   width: 75,  // Fixed width for right side
   alignItems: 'flex-end',
 },
-registerText: { 
-  fontSize: 18, 
-  fontWeight: '800',
+registerText: {
+  fontSize: 16,
+  fontWeight: '700',
   includeFontPadding: false,
-  textAlign: 'center',      // ✅ Centers text inside
-  width: '100%',            // Takes full width of parent
+  textAlign: 'center',
 },
-  menuButton: { 
-    padding: 8,
-    minWidth: 44,
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+ menuButton: {
+  padding: 8,
+  minWidth: 44,
+  minHeight: 44,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
   menuButtonText: { 
     fontSize: 22,
     includeFontPadding: false,
@@ -5329,10 +5785,10 @@ menuSection: {
     textAlign: 'center',
   },
  cartSection: {
-    width: 90,  // ✅ Fixed width - bigger
+      // ✅ Fixed width - bigger
     borderLeftWidth: 1,
     height: '100%',
-  // ✅ Add this
+ 
     
 },
   cartSectionMobile: { 
@@ -5452,12 +5908,11 @@ catGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    paddingHorizontal: 4,
 },
 categoryCard: {
     width: '48%',  // 2 columns
     marginBottom: 12,
-    padding: 16,
+    padding: 12,
     borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
@@ -6734,6 +7189,20 @@ addBtnText: {
     justifyContent: 'center', 
     padding: 16,
   },
+ endSalesButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: 'rgba(255,255,255,0.2)',
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  borderRadius: 20,
+  gap: 6,
+  marginRight: 8,
+},
+endSalesText: {
+  fontSize: 13,
+  fontWeight: '600',
+},
   modalContent: { 
     borderRadius: 20, 
     padding: 20, 
@@ -7434,6 +7903,12 @@ layerInfo: {
 layerTitle: {
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
+    
+    left: 15,
+    right: 0,
+    
+    
 },
 layerSubtitle: {
     fontSize: 12,

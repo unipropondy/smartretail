@@ -1,6 +1,6 @@
 // frontend/src/components/DepartmentManagement.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -51,18 +51,24 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
     const [formName, setFormName] = useState('');
     const [formActive, setFormActive] = useState(true);
     const [saving, setSaving] = useState(false);
-
+const departmentsLoadedRef = useRef(false);
+const isLoadingDepartmentsRef = useRef(false);
     useEffect(() => {
         if (visible) {
             loadDepartments();
         }
     }, [visible]);
-
-    const loadDepartments = async () => {
-        setLoading(true);
+const departmentsLoaded = useRef(false);
+  const loadDepartments = async () => {
+  // ✅ Add this at the beginning
+  if (departmentsLoadedRef.current) {
+    console.log('⏭️ Departments already loaded, skipping');
+    return;
+  }
         try {
             const response = await API.get('/departments');
             setDepartments(response.data || []);
+            departmentsLoadedRef.current = true; 
         } catch (error) {
             console.log('Error loading departments:', error);
             Alert.alert('Error', 'Failed to load departments');

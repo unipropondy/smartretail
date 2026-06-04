@@ -18,7 +18,7 @@ import BillPDFGenerator from './BillPDFGenerator';
 import { useCurrency } from '../context/CurrencyContext';
 import API, { uploadAPI } from '../api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
+import NetworkPrinterService from './NetworkPrinterService';
 declare global {
   interface Window {
     __markImagePickerOpen?: () => void;
@@ -86,7 +86,12 @@ const CompanySettingsForm: React.FC<Props> = ({
   const [saving, setSaving] = useState(false);
   const [uploadingCompanyLogo, setUploadingCompanyLogo] = useState(false);
   const [uploadingHalalLogo, setUploadingHalalLogo] = useState(false);
-
+// Add these with other useState declarations
+const [printerType, setPrinterType] = useState<'network' | 'sunmi'>('network');
+const [printerIP, setPrinterIP] = useState('192.168.0.244'); // ← Change to 244!
+const [printerPort, setPrinterPort] = useState('80');
+const [printerEnabled, setPrinterEnabled] = useState(false);
+const [testingPrinter, setTestingPrinter] = useState(false);
   useEffect(() => {
     if (visible) {
       loadClientSettings();
@@ -138,6 +143,13 @@ const CompanySettingsForm: React.FC<Props> = ({
             });
             
             setEnableGST(savedSettings.gstPercentage > 0);
+            const printerRes = await API.get(`/company-settings/printer/${clientId}`);
+  if (printerRes.data) {
+    setPrinterType(printerRes.data.printerType || 'network');
+    setPrinterIP(printerRes.data.printerIP || '192.168.0.241');
+    setPrinterPort(printerRes.data.printerPort?.toString() || '9100');
+    setPrinterEnabled(printerRes.data.printerEnabled || false);
+  }
         } else {
             console.log('⚠️ No clientId provided!');
         }
@@ -245,7 +257,11 @@ const CompanySettingsForm: React.FC<Props> = ({
         showCompanyLogo: settings.showCompanyLogo,
         showHalalLogo: settings.showHalalLogo,
         companyLogo: settings.companyLogo,
-        halalLogo: settings.halalLogo
+        halalLogo: settings.halalLogo,
+          printerType: printerType,
+    printerIP: printerIP,
+    printerPort: parseInt(printerPort),
+    printerEnabled: printerEnabled
     };
 
     console.log('🔍 FINAL SETTINGS TO SAVE:', {
@@ -283,7 +299,14 @@ const CompanySettingsForm: React.FC<Props> = ({
                 companyLogo: freshSettings.companyLogo,
                 halalLogo: freshSettings.halalLogo
             });
-            
+             if (clientId) {
+    await API.post(`/company-settings/printer/${clientId}`, {
+      printerType,
+      printerIP,
+      printerPort: parseInt(printerPort),
+      printerEnabled
+    }).catch(err => console.log('Printer save error:', err));
+  }
             setEnableGST(freshSettings.gstPercentage > 0);
             await refreshCurrency();
             await new Promise(resolve => setTimeout(resolve, 300));
@@ -309,6 +332,43 @@ const CompanySettingsForm: React.FC<Props> = ({
     { code: 'EUR', symbol: '€', name: 'Euro' },
     { code: 'GBP', symbol: '£', name: 'British Pound' },
   ];
+const testNetworkPrinter = async () => {
+  setTestingPrinter(true);
+  
+  try {
+    const ip = printerIP.trim();
+    const port = parseInt(printerPort) || 9100;
+    
+    console.log(`🔍 Testing printer at ${ip}:${port}`);
+    
+    // ✅ Call the test function from NetworkPrinterService
+    const result = await NetworkPrinterService.testConnection(ip, port);
+    
+    if (result) {
+      Alert.alert(
+        '✅ Success', 
+        `Printer is reachable at ${ip}:${port}!`,
+        [{ text: 'OK' }]
+      );
+    } else {
+      Alert.alert(
+        '❌ Failed', 
+        `Cannot reach printer at ${ip}:${port}\n\n` +
+        `Please check:\n` +
+        `• Printer is ON\n` +
+        `• Same WiFi network\n` +
+        `• IP address is correct: ${ip}\n` +
+        `• Port is correct: ${port}`,
+        [{ text: 'OK' }]
+      );
+    }
+  } catch (error: any) {
+    console.log('Test error:', error);
+    Alert.alert('Error', 'Failed to test printer: ' + (error?.message || 'Unknown error'));
+  } finally {
+    setTestingPrinter(false);
+  }
+};
 
   return (
     <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose}>
@@ -582,7 +642,120 @@ const CompanySettingsForm: React.FC<Props> = ({
               />
             </>
           )}
+{/* ========== PRINTER SETTINGS SECTION ========== */}
+<View style={styles.fullSectionHeader}>
+  <Text style={[styles.fullSectionTitle, { color: theme.text }]}>🖨️ Printer Settings</Text>
+  <Text style={[styles.fullSectionHint, { color: theme.textSecondary }]}>
+    Configure thermal printer for automatic bill printing
+  </Text>
+</View>
 
+<View style={[styles.fullCard, { backgroundColor: theme.surface }]}>
+  {/* Enable Printer Switch */}
+  <View style={styles.fullSwitchRow}>
+    <View style={styles.fullSwitchLeft}>
+      <Ionicons name="print" size={24} color={theme.primary} />
+      <Text style={[styles.fullSwitchLabel, { color: theme.text }]}>Enable Auto Print</Text>
+    </View>
+    <Switch
+      value={printerEnabled}
+      onValueChange={setPrinterEnabled}
+      trackColor={{ false: theme.inactive, true: theme.success }}
+      thumbColor="#fff"
+    />
+  </View>
+
+  {printerEnabled && (
+    <>
+      {/* Printer Type Selection */}
+      <Text style={[styles.fullLabel, { color: theme.textSecondary, marginTop: 15 }]}>Printer Type</Text>
+      <View style={styles.printerTypeRow}>
+        <TouchableOpacity
+          style={[
+            styles.printerTypeBtn,
+            printerType === 'network' && { backgroundColor: theme.primary }
+          ]}
+          onPress={() => setPrinterType('network')}
+        >
+          <Text style={{ color: printerType === 'network' ? '#fff' : theme.text }}>
+            🌐 Network (IP)
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.printerTypeBtn,
+            printerType === 'sunmi' && { backgroundColor: theme.primary }
+          ]}
+          onPress={() => setPrinterType('sunmi')}
+        >
+          <Text style={{ color: printerType === 'sunmi' ? '#fff' : theme.text }}>
+            📱 Sunmi Built-in
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Network Printer Settings */}
+      {printerType === 'network' && (
+        <>
+          <Text style={[styles.fullLabel, { color: theme.textSecondary, marginTop: 15 }]}>
+            Printer IP Address
+          </Text>
+          <TextInput
+            style={[styles.fullInput, {
+              backgroundColor: theme.surface,
+              color: theme.text,
+              borderColor: theme.border
+            }]}
+            placeholder="192.168.0.241"
+            value={printerIP}
+            onChangeText={setPrinterIP}
+          />
+
+          <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>
+            Port (Default: 9100)
+          </Text>
+          <TextInput
+            style={[styles.fullInput, {
+              backgroundColor: theme.surface,
+              color: theme.text,
+              borderColor: theme.border
+            }]}
+            placeholder="9100"
+            value={printerPort}
+            onChangeText={setPrinterPort}
+            keyboardType="numeric"
+          />
+
+         {/* Test Printer Button */}
+<TouchableOpacity
+  style={[styles.testPrinterBtn, { backgroundColor: theme.primary }]}
+  onPress={testNetworkPrinter}
+  disabled={testingPrinter}
+>
+  {testingPrinter ? (
+    <ActivityIndicator size="small" color="#fff" />
+  ) : (
+    <>
+      <Ionicons name="print-outline" size={20} color="#fff" />
+      <Text style={{ color: '#fff', marginLeft: 8 }}>🔍 Test Printer Connection</Text>
+    </>
+  )}
+</TouchableOpacity>
+        </>
+      )}
+
+      {/* Sunmi Printer Info */}
+      {printerType === 'sunmi' && (
+        <View style={[styles.infoBox, { backgroundColor: theme.success + '20', marginTop: 15 }]}>
+          <Ionicons name="checkmark-circle" size={20} color={theme.success} />
+          <Text style={{ color: theme.success, flex: 1, marginLeft: 10 }}>
+            Sunmi printer will be auto-detected
+          </Text>
+        </View>
+      )}
+    </>
+  )}
+</View>
           {/* Phone */}
           <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Phone Number</Text>
           <TextInput
@@ -826,6 +999,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  // Add these to the styles object
+printerTypeRow: {
+  flexDirection: 'row',
+  gap: 12,
+  marginTop: 8,
+},
+printerTypeBtn: {
+  flex: 1,
+  paddingVertical: 12,
+  borderRadius: 10,
+  alignItems: 'center',
+  borderWidth: 1,
+  borderColor: 'transparent',
+},
+testPrinterBtn: {
+  paddingVertical: 12,
+  borderRadius: 10,
+  alignItems: 'center',
+  marginTop: 10,
+},
+infoBox: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  padding: 12,
+  borderRadius: 10,
+},
 });
 
 export default CompanySettingsForm;

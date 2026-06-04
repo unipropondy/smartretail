@@ -116,7 +116,11 @@ router.get('/:targetId', async (req, res) => {
                     c.CompanyLogoUrl,
                     c.HalalLogoUrl,
                     ISNULL(c.ShowCompanyLogo, 0) as ShowCompanyLogo,
-                    ISNULL(c.ShowHalalLogo, 0) as ShowHalalLogo
+                    ISNULL(c.ShowHalalLogo, 0) as ShowHalalLogo,
+                     ISNULL(c.PrinterType, 'network') as PrinterType,
+            ISNULL(c.PrinterIP, '192.168.0.241') as PrinterIP,
+            ISNULL(c.PrinterPort, 9100) as PrinterPort,
+            ISNULL(c.PrinterEnabled, 0) as PrinterEnabled
                 FROM Outlets o
                 LEFT JOIN CompanySettings c ON o.Id = c.OutletId
                 WHERE o.Id = @outletId
@@ -152,7 +156,11 @@ router.get('/:targetId', async (req, res) => {
             CompanyLogoUrl: row.CompanyLogoUrl || '',
             HalalLogoUrl: row.HalalLogoUrl || '',
             ShowCompanyLogo: showCompanyLogo,
-            ShowHalalLogo: showHalalLogo
+            ShowHalalLogo: showHalalLogo,
+             PrinterType: row.PrinterType || 'network',
+    PrinterIP: row.PrinterIP || '192.168.0.241',
+    PrinterPort: row.PrinterPort || 9100,
+    PrinterEnabled: row.PrinterEnabled === 1 || row.PrinterEnabled === true
         };
         
         res.json({
@@ -228,15 +236,21 @@ router.post('/:targetId', async (req, res) => {
             .input('halalLogoUrl', sql.NVarChar, HalalLogoUrl || null)
             .input('showCompanyLogo', sql.Bit, companyLogoValue)
             .input('showHalalLogo', sql.Bit, halalLogoValue)
+             .input('printerType', sql.NVarChar, req.body.PrinterType || 'network')
+    .input('printerIP', sql.NVarChar, req.body.PrinterIP || '192.168.0.241')
+    .input('printerPort', sql.Int, req.body.PrinterPort || 9100)
+    .input('printerEnabled', sql.Bit, req.body.PrinterEnabled ? 1 : 0)
             .query(`
                 INSERT INTO CompanySettings (
                     OutletId, CompanyName, Address, GSTNo, GSTPercentage, 
                     Phone, Email, CashierName, Currency, CurrencySymbol,
-                    CompanyLogoUrl, HalalLogoUrl, ShowCompanyLogo, ShowHalalLogo
+                    CompanyLogoUrl, HalalLogoUrl, ShowCompanyLogo, ShowHalalLogo,
+            PrinterType, PrinterIP, PrinterPort, PrinterEnabled
                 ) VALUES (
                     @outletId, @companyName, @address, @gstNo, @gstPercentage,
                     @phone, @email, @cashierName, @currency, @currencySymbol,
-                    @companyLogoUrl, @halalLogoUrl, @showCompanyLogo, @showHalalLogo
+                    @companyLogoUrl, @halalLogoUrl, @showCompanyLogo, @showHalalLogo,
+            PrinterType, PrinterIP, PrinterPort, PrinterEnabled
                 )
             `);
         
