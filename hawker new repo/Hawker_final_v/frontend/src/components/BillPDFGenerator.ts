@@ -5,8 +5,6 @@ import * as Sharing from 'expo-sharing';
 import { Platform, Alert } from 'react-native';
 import API from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PrinterDetector } from './PrinterDetector';
-import SunmiPrinterService from './SunmiPrinterService';
 
 interface CompanySettings {
   name: string;
@@ -20,8 +18,6 @@ interface CompanySettings {
   currencySymbol: string;
    companyLogo?: string;        // ✅ ADD THIS
   halalLogo?: string;          // ✅ ADD THIS
-   printerIp?: string;      // ✅ Network printer IP
-  printerType?: 'sunmi' | 'network' | 'usb' | 'bluetooth' | 'auto';
   showCompanyLogo?: boolean;   // ✅ ADD THIS
   showHalalLogo?: boolean; 
 }
@@ -35,142 +31,7 @@ interface DiscountInfo {
 }
 
 class BillPDFGenerator {
-// In BillPDFGenerator.ts - Replace smartPrint method
-
-static async smartPrint(
-  saleData: any,
-  userId?: string | number,
-  discountInfo?: DiscountInfo,
-  companyOverride?: CompanySettings
-): Promise<boolean> {
-  try {
-    const company = companyOverride || await this.loadSettings(userId);
-    
-    // ✅ Step 1: Detect available printer type
-    const printerType = await PrinterDetector.detectPrinter();
-    console.log(`🖨️ Detected printer: ${printerType}`);
-    
-    // ✅ Step 2: Try based on detected type
-    switch(printerType) {
-    
-        
-      case 'network':
-        // Network/WiFi/Ethernet printer
-        if (company.printerIp) {
-          try {
-            const NetworkPrinterService = require('./NetworkPrinterService').default;
-            const networkPrinted = await NetworkPrinterService.printIP(
-              company.printerIp,
-              saleData,
-              company,
-              discountInfo
-            );
-            if (networkPrinted) {
-              console.log('✅ Printed via Network Printer');
-              return true;
-            }
-          } catch (e) {
-            console.log('Network printer failed:', e);
-          }
-        }
-        break;
-        
-      case 'usb':
-        // USB printer
-        try {
-          const USBPrinterService = require('./USBPrinterService').default;
-          const usbPrinted = await USBPrinterService.print(saleData, company);
-          if (usbPrinted) {
-            console.log('✅ Printed via USB Printer');
-            return true;
-          }
-        } catch (e) {
-          console.log('USB printer failed:', e);
-        }
-        break;
-        
-      case 'bluetooth':
-        // Bluetooth printer
-        try {
-          const BluetoothPrinterService = require('./BluetoothPrinterService').default;
-          const btPrinted = await BluetoothPrinterService.print(saleData, company);
-          if (btPrinted) {
-            console.log('✅ Printed via Bluetooth Printer');
-            return true;
-          }
-        } catch (e) {
-          console.log('Bluetooth printer failed:', e);
-        }
-        break;
-    }
-    
-    // ✅ Step 3: Fallback to PDF
-    console.log('⚠️ No printer available, falling back to PDF');
-    return await this.offerPDFFallback(saleData, userId, discountInfo);
-    
-  } catch (error) {
-    console.log('❌ Smart print error:', error);
-    return await this.offerPDFFallback(saleData, userId, discountInfo);
-  }
-}
-  static async printToNetworkPrinter(
-    saleData: any,
-    ipAddress: string,
-    userId?: string | number,
-    discountInfo?: DiscountInfo
-  ): Promise<boolean> {
-    try {
-      const html = await this.generateHTML(saleData, userId, discountInfo);
-      
-      // For network printers, we can:
-      // 1. Send HTML to print server
-      // 2. Or convert to ESC/POS and send via socket
-      
-      const { uri } = await Print.printToFileAsync({ html });
-      // Send to network printer via HTTP/RAW
-      return true;
-    } catch (error) {
-      console.log('Network print error:', error);
-      return false;
-    }
-  }
-  static async offerPDFFallback(
-  saleData: any, 
-  userId?: string | number, 
-  t?: any, 
-  discountInfo?: DiscountInfo
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    Alert.alert(
-      t?.printerNotFound || '🖨️ No Printer Available', 
-      t?.wantPDF || 'Save bill as PDF?', 
-      [
-        { text: t?.no || 'No', onPress: () => resolve(false), style: 'cancel' },
-        { 
-          text: t?.yes || 'Yes', 
-          onPress: async () => {
-            try {
-              const html = await this.generateHTML(saleData, userId, discountInfo);
-              
-              if (Platform.OS === 'ios') {
-                await Print.printAsync({ html });
-              } else {
-                const { uri } = await Print.printToFileAsync({ html, width: 226 });
-                if (await Sharing.isAvailableAsync()) {
-                  await Sharing.shareAsync(uri);
-                }
-              }
-              resolve(true);
-            } catch (error) {
-              console.error('PDF Fallback Error:', error);
-              resolve(false);
-            }
-          }
-        }
-      ]
-    );
-  });
-}
+  
 static async loadSettings(userId?: string | number): Promise<CompanySettings> {
     try {
         if (!userId) return this.getDefaultSettings();

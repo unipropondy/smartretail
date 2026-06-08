@@ -605,7 +605,14 @@ const getSales = async (req, res) => {
                 console.log('Error parsing ItemsJson for sale:', sale.Id, e.message);
                 items = [];
             }
-            
+            let singaporeDate = sale.SaleDate;
+        if (sale.SaleDate) {
+            const dbDate = new Date(sale.SaleDate);
+            // Subtract 8 hours (8 * 60 * 60 * 1000 = 28,800,000 ms)
+            singaporeDate = new Date(dbDate.getTime() - (8 * 60 * 60 * 1000));
+            console.log('📅 UTC DB:', dbDate.toISOString());
+            console.log('📅 Singapore (UTC-8):', singaporeDate.toLocaleString());
+        }
             // Use valueCard from parsed JSON if available, otherwise from SQL extraction
             if (!valueCardInfo && sale.ValueCardAmount && sale.ValueCardAmount > 0) {
                 valueCardInfo = {
@@ -625,7 +632,7 @@ const getSales = async (req, res) => {
                 id: sale.Id,
                 total: sale.Total,
                 paymentMethod: sale.PaymentMethod,
-                date: sale.SaleDate,
+                date: singaporeDate,
                 invoiceNumber: sale.InvoiceNumber || '',
                 items: items,
                 cashPaid: sale.CashPaid,
