@@ -12,9 +12,9 @@ const config = {
     encrypt: true,
     trustServerCertificate: true,
     enableArithAbort: true,
-    connectTimeout: 60000,      // ✅ Increased from 30s to 60s
-    requestTimeout: 60000,       // ✅ Increased from 30s to 60s
-    cancelTimeout: 10000         // ✅ Increased from 5s to 10s
+    connectTimeout: 120000,      // ✅ Increased from 30s to 60s
+    requestTimeout: 120000,       // ✅ Increased from 30s to 60s
+    cancelTimeout: 30000         // ✅ Increased from 5s to 10s
   },
   pool: {
     max: 100,                    // ✅ Increased from 50 to 100
