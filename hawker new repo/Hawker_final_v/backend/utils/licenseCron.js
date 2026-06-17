@@ -5,7 +5,7 @@ const startLicenseChecker = () => {
     // Run every minute (for testing)
     cron.schedule('* * * * *', async () => {
         try {
-            const pool = getPool();
+            const pool = await getPool();
             
             // Update expired licenses
             const result = await pool.request()

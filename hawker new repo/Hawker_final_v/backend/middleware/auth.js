@@ -17,7 +17,7 @@ const authenticateToken = async (req, res, next) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         
         // ✅ Check if user is still active in database
-        const pool = getPool();
+        const pool = await getPool();
         const result = await pool.request()
             .input('userId', sql.Int, decoded.id)
             .query('SELECT IsActive FROM Users WHERE Id = @userId');

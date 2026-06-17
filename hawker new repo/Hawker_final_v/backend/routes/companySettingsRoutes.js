@@ -16,7 +16,7 @@ const getEffectiveOutletId = async (req, res, next) => {
         console.log(`🔍 Getting outlet for ${userRole} ${userId}`);
         
         if (userRole === 'staff') {
-            const pool = getPool();
+            const pool = await getPool();
             const result = await pool.request()
                 .input('userId', sql.Int, userId)
                 .query('SELECT OutletId FROM Users WHERE Id = @userId');
@@ -39,7 +39,7 @@ const getEffectiveOutletId = async (req, res, next) => {
                 });
             }
             
-            const pool = getPool();
+            const pool = await getPool();
             const result = await pool.request()
                 .input('outletId', sql.Int, outletId)
                 .input('ownerId', sql.Int, userId)
@@ -97,7 +97,7 @@ router.get('/:targetId', async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('outletId', sql.Int, outletId)
@@ -213,7 +213,7 @@ router.post('/:targetId', async (req, res) => {
         console.log('📥 SAVING TO DATABASE for outlet:', outletId);
         console.log('📥 Logo values:', { companyLogoValue, halalLogoValue });
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Delete existing
         await pool.request()
@@ -274,7 +274,7 @@ router.delete('/:targetId', async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         await pool.request()
             .input('outletId', sql.Int, outletId)

@@ -16,7 +16,7 @@ router.post('/create-owner', authenticateToken, async (req, res) => {
 
         const { shopName, username, password, fullName } = req.body;
 
-        const pool = getPool();
+        const pool = await getPool();
                 // Check if username exists
         const existing = await pool.request()
             .input('username', sql.NVarChar, username)
@@ -68,7 +68,7 @@ router.post('/create-staff-direct', authenticateToken, async (req, res) => {
 
         console.log('📦 Creating standalone staff:', { shopName, username });
 
-        const pool = getPool();
+        const pool = await getPool();
 
         // Check if username exists
         const existing = await pool.request()
@@ -180,7 +180,7 @@ router.get('/staff-standalone', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .query(`
@@ -226,7 +226,7 @@ router.post('/create-staff', authenticateToken, async (req, res) => {
 
         const { ownerId, shopName, username, password, fullName, startDate, endDate } = req.body;
 
-        const pool = getPool();
+        const pool = await getPool();
 
         // Check if username exists
         const existing = await pool.request()
@@ -359,7 +359,7 @@ router.post('/create-shop', authenticateToken, async (req, res) => {
         
         console.log('📦 Creating shop with outlets:', outlets);
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Check if owner username exists
         const existingOwner = await pool.request()
@@ -535,7 +535,7 @@ router.post('/set-void-password/:outletId', authenticateToken, async (req, res) 
         const { voidPassword, enabled } = req.body;
         
         // ✅ Get pool here
-        const pool = getPool();
+        const pool = await getPool();
 
         // If owner, verify they own this outlet
         if (req.user.role === 'owner') {
@@ -589,7 +589,7 @@ router.get('/void-password-status/:outletId', authenticateToken, async (req, res
         const { outletId } = req.params;
         
         // ✅ Get pool here, not at top level
-        const pool = getPool();
+        const pool = await getPool();
         
         // Verify access
         if (req.user.role === 'owner') {
@@ -638,7 +638,7 @@ router.put('/toggle-status/:userId', authenticateToken, async (req, res) => {
 
         console.log(`🔄 Toggle request - User: ${userId}, New Status: ${isActive}`);
 
-        const pool = getPool();
+        const pool = await getPool();
 
         // First check if user exists
         const checkResult = await pool.request()
@@ -693,7 +693,7 @@ router.delete('/delete-user/:userId', authenticateToken, async (req, res) => {
         }
 
         const { userId } = req.params;
-        const pool = getPool();
+        const pool = await getPool();
 
         // Check if user is owner
         const userCheck = await pool.request()
@@ -825,7 +825,7 @@ router.put('/update-yeahpay-settings/:outletId', authenticateToken, async (req, 
 
         console.log('📝 Updating YeahPay settings:', { outletId, deviceSN, deviceSalt, enabled });
 
-        const pool = getPool();
+        const pool = await getPool();
         
         // Check if outlet exists
         const checkResult = await pool.request()
@@ -875,7 +875,7 @@ router.delete('/delete-standalone-staff/:staffId', authenticateToken, async (req
         }
 
         const { staffId } = req.params;
-        const pool = getPool();
+        const pool = await getPool();
 
         // Check if staff exists and is standalone
         const staffCheck = await pool.request()
@@ -981,7 +981,7 @@ router.get('/shops', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .query(`
@@ -1085,7 +1085,7 @@ router.post('/renew-license/:outletId', authenticateToken, async (req, res) => {
 
         const { outletId } = req.params;
         const { startDate, endDate } = req.body;
-        const pool = getPool();
+        const pool = await getPool();
         
         // Parse dates
         const startLocal = new Date(startDate);
@@ -1165,7 +1165,7 @@ router.post('/add-outlet', authenticateToken, async (req, res) => {
 
         console.log('📦 Adding outlet:', { ownerId, outletName, staffUsername });
 
-        const pool = getPool();
+        const pool = await getPool();
 
         // Check if owner exists
         const ownerCheck = await pool.request()
@@ -1300,7 +1300,7 @@ router.put('/toggle-outlet/:outletId', authenticateToken, async (req, res) => {
 
         console.log(`🔄 Toggling outlet ${outletId} to ${isActive}`);
 
-        const pool = getPool();
+        const pool = await getPool();
         
         // 1️⃣ Update outlet status
         await pool.request()
@@ -1336,7 +1336,7 @@ router.delete('/delete-outlet/:outletId', authenticateToken, async (req, res) =>
         }
 
         const { outletId } = req.params;
-        const pool = getPool();
+        const pool = await getPool();
 
         const transaction = pool.transaction();
         await transaction.begin();
@@ -1447,7 +1447,7 @@ router.put('/edit-user', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        const pool = getPool();
+        const pool = await getPool();
         
         // Check if user exists
         const userCheck = await pool.request()
@@ -1530,7 +1530,7 @@ router.put('/edit-user', authenticateToken, async (req, res) => {
 // ============================================
 router.get('/status', authenticateToken, async (req, res) => {
     try {
-        const pool = getPool();
+        const pool = await getPool();
         const userId = req.user.id;
         const userRole = req.user.role;
         

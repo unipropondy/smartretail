@@ -10,7 +10,7 @@ const validateSession = async (req, res, next) => {
       return next();
     }
 
-    const pool = getPool();
+    const pool = await getPool();
     
     // Check if this session is still active in database
     const result = await pool.request()

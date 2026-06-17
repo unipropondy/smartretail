@@ -20,7 +20,7 @@ router.get('/check', authenticateToken, async (req, res) => {
     
     console.log('📡 Check settlement:', { outletId, date });
     
-    const pool = getPool();
+    const pool = await getPool();
     const result = await pool.request()
       .input('outletId', sql.Int, outletId)
       .input('settlementDate', sql.Date, date)
@@ -50,7 +50,7 @@ router.get('/opening-cash', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid outletId' });
     }
     
-    const pool = getPool();
+    const pool = await getPool();
     const result = await pool.request()
       .input('outletId', sql.Int, outletId)
       .input('settlementDate', sql.Date, date)
@@ -89,7 +89,7 @@ router.post('/opening-cash', authenticateToken, async (req, res) => {
     }
     
     const openingCashJSON = JSON.stringify({ notes, coins });
-    const pool = getPool();
+    const pool = await getPool();
     
     await pool.request()
       .input('outletId', sql.Int, outletId)
@@ -128,7 +128,7 @@ router.get('/cash-out', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid outletId' });
     }
     
-    const pool = getPool();
+    const pool = await getPool();
     const result = await pool.request()
       .input('outletId', sql.Int, outletId)
       .input('settlementDate', sql.Date, date)
@@ -162,7 +162,7 @@ router.post('/cash-out', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid outletId' });
     }
     
-    const pool = getPool();
+    const pool = await getPool();
     
     // Get existing
     const existing = await pool.request()
@@ -222,7 +222,7 @@ router.put('/cash-out/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid outletId' });
     }
     
-    const pool = getPool();
+    const pool = await getPool();
     
     // Get existing cash outs
     const existing = await pool.request()
@@ -291,7 +291,7 @@ router.delete('/cash-out/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid outletId' });
     }
     
-    const pool = getPool();
+    const pool = await getPool();
     
     const existing = await pool.request()
       .input('outletId', sql.Int, outletId)
@@ -334,7 +334,7 @@ router.get('/physical-cash', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid outletId' });
     }
     
-    const pool = getPool();
+    const pool = await getPool();
     const result = await pool.request()
       .input('outletId', sql.Int, outletId)
       .input('settlementDate', sql.Date, date)
@@ -373,7 +373,7 @@ router.post('/physical-cash', authenticateToken, async (req, res) => {
     }
     
     const physicalCashJSON = JSON.stringify({ notes, coins });
-    const pool = getPool();
+    const pool = await getPool();
     
     await pool.request()
       .input('outletId', sql.Int, outletId)
@@ -418,7 +418,7 @@ router.post('/finalize', authenticateToken, async (req, res) => {
       paynow: paynowAmount || 0, valuecard: valueCardAmount || 0 
     });
     
-    const pool = getPool();
+    const pool = await getPool();
     
     // Check if already settled
     const checkResult = await pool.request()

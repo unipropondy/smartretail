@@ -7,7 +7,7 @@ const updateSessionActivity = async (req, res, next) => {
         const token = req.headers.authorization?.split(' ')[1];
         
         if (token) {
-            const pool = getPool();
+            const pool = await getPool();
             await pool.request()
                 .input('sessionToken', sql.NVarChar, token)
                 .query(`

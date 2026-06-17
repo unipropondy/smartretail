@@ -9,7 +9,7 @@ const { authenticateToken } = require('../middleware/auth');
 // HELPER FUNCTION - Get owner ID (for staff)
 // ============================================
 const getOwnerId = async (userId) => {
-    const pool = getPool();
+    const pool = await getPool();
     const result = await pool.request()
         .input('userId', sql.Int, userId)
         .query(`
@@ -35,7 +35,7 @@ router.get('/paynow/:userId', authenticateToken, async (req, res) => {
     // ✅ ALWAYS get owner ID
     const ownerId = await getOwnerId(userId);
     
-    const pool = getPool();
+    const pool = await getPool();
     
     const result = await pool.request()
       .input('userId', sql.Int, ownerId)
@@ -64,7 +64,7 @@ router.put('/update-paynow', authenticateToken, async (req, res) => {
     // ✅ ALWAYS update owner's QR
     const ownerId = await getOwnerId(userId);
     
-    const pool = getPool();
+    const pool = await getPool();
     
     await pool.request()
       .input('userId', sql.Int, ownerId)
@@ -91,7 +91,7 @@ router.post('/layer-preference', authenticateToken, async (req, res) => {
         
         console.log('💾 Saving layer preference:', { userId, layerPreference });
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Simple UPDATE - column already exists
         const result = await pool.request()
@@ -119,7 +119,7 @@ router.get('/layer-preference', authenticateToken, async (req, res) => {
         
         console.log('📥 Getting layer preference for user:', userId);
         
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('userId', sql.Int, userId)

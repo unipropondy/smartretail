@@ -10,7 +10,7 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Owner access required' });
         }
 
-        const pool = getPool();
+        const pool = await getPool();
         
         // Get owner's details with license
         const ownerResult = await pool.request()
@@ -67,7 +67,7 @@ router.get('/license', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Owner access required' });
         }
 
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('ownerId', sql.Int, req.user.id)
@@ -98,7 +98,7 @@ router.post('/staff', authenticateToken, async (req, res) => {
         }
 
         const { username, password, fullName } = req.body;
-        const pool = getPool();
+        const pool = await getPool();
         
         // Check if username exists
         const existing = await pool.request()
@@ -153,7 +153,7 @@ router.put('/staff/:staffId/toggle', authenticateToken, async (req, res) => {
 
         const { staffId } = req.params;
         const { isActive } = req.body;
-        const pool = getPool();
+        const pool = await getPool();
         
         // Verify staff belongs to this owner
         const checkResult = await pool.request()

@@ -6,7 +6,7 @@ const { getPool, sql } = require('../config/db');
 const startSessionCleanup = () => {
     setInterval(async () => {
         try {
-            const pool = getPool();
+            const pool = await getPool();
             
             // Deactivate sessions with no activity for 10 seconds
             const result = await pool.request().query(`

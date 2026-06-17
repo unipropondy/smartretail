@@ -17,7 +17,7 @@ const getEffectiveOutletId = async (req, res, next) => {
         
         // For staff: get their outlet ID from Users table
         if (userRole === 'staff') {
-            const pool = getPool();
+            const pool = await getPool();
             const result = await pool.request()
                 .input('userId', sql.Int, userId)
                 .query('SELECT OutletId FROM Users WHERE Id = @userId');
@@ -42,7 +42,7 @@ const getEffectiveOutletId = async (req, res, next) => {
             }
             
             // Verify outlet belongs to this owner
-            const pool = getPool();
+            const pool = await getPool();
             const result = await pool.request()
                 .input('outletId', sql.Int, outletId)
                 .input('ownerId', sql.Int, userId)
@@ -92,7 +92,7 @@ router.get('/paynow/:targetId', authenticateToken, getEffectiveOutletId, async (
     
     console.log(`📡 Fetching PayNow QR for outlet: ${outletId}`);
     
-    const pool = getPool();
+    const pool = await getPool();
     
     const result = await pool.request()
       .input('outletId', sql.Int, outletId)
@@ -116,7 +116,7 @@ router.put('/update-paynow', authenticateToken, getEffectiveOutletId, async (req
     
     console.log(`📡 Updating PayNow QR for outlet: ${outletId}`);
     
-    const pool = getPool();
+    const pool = await getPool();
     
     await pool.request()
       .input('outletId', sql.Int, outletId)
@@ -141,7 +141,7 @@ router.get('/upi/:targetId', authenticateToken, getEffectiveOutletId, async (req
     
     console.log(`📡 Fetching UPI ID for outlet: ${outletId}`);
     
-    const pool = getPool();
+    const pool = await getPool();
     
     const result = await pool.request()
       .input('outletId', sql.Int, outletId)
@@ -166,7 +166,7 @@ router.put('/update-upi', authenticateToken, getEffectiveOutletId, async (req, r
     
     console.log(`📡 Updating UPI ID for outlet: ${outletId}`);
     
-    const pool = getPool();
+    const pool = await getPool();
     
     await pool.request()
       .input('outletId', sql.Int, outletId)
@@ -193,7 +193,7 @@ router.get('/payment-modes/:targetId', authenticateToken, getEffectiveOutletId, 
     
     console.log(`📡 Fetching payment modes for ${type || 'outlet'}:`, outletId);
     
-    const pool = getPool();
+    const pool = await getPool();
     let result;
     
     if (type === 'outlet') {
@@ -234,7 +234,7 @@ router.put('/payment-modes', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Outlet ID required' });
     }
     
-    const pool = getPool();
+    const pool = await getPool();
     const modesJson = JSON.stringify(paymentModes);
     
     // Check if record exists

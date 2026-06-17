@@ -15,7 +15,7 @@ router.post('/open', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
 
-        const pool = getPool();
+        const pool = await getPool();
         
         // Close any existing open drawer
         await pool.request()
@@ -72,7 +72,7 @@ router.post('/close', authenticateToken, async (req, res) => {
         const { logId, notes } = req.body;
         const outletId = req.outletId;
 
-        const pool = getPool();
+        const pool = await getPool();
 
         const result = await pool.request()
             .input('outletId', sql.Int, outletId)
@@ -107,7 +107,7 @@ router.post('/close', authenticateToken, async (req, res) => {
 router.get('/check-open', authenticateToken, async (req, res) => {
     try {
         const outletId = req.outletId;
-        const pool = getPool();
+        const pool = await getPool();
 
         const result = await pool.request()
             .input('outletId', sql.Int, outletId)
@@ -136,7 +136,7 @@ router.get('/history', authenticateToken, async (req, res) => {
         const { limit = 50 } = req.query;
         const outletId = req.outletId;
 
-        const pool = getPool();
+        const pool = await getPool();
         const result = await pool.request()
             .input('outletId', sql.Int, outletId)
             .input('limit', sql.Int, parseInt(limit))

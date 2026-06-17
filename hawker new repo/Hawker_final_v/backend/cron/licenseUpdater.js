@@ -19,7 +19,7 @@ const startLicenseUpdater = () => {
             console.log(`🔄 Daily license check at Singapore 6:00 AM - ${new Date().toLocaleString()}`);
             
             try {
-                const pool = getPool();
+                const pool = await getPool();
                 
                 // Update expired licenses
                 const result = await pool.request()

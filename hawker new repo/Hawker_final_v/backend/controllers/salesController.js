@@ -10,7 +10,7 @@ const getEffectiveOutletId = async (req) => {
     
     // For staff: get their outlet ID
     if (userRole === 'staff') {
-        const pool = getPool();
+        const pool = await getPool();
         const result = await pool.request()
             .input('userId', sql.Int, userId)
             .query('SELECT OutletId FROM Users WHERE Id = @userId');
@@ -56,7 +56,7 @@ const createSale = async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ GENERATE INVOICE NUMBER
         const invoiceNumber = await generateInvoiceNumber(pool, outletId);
@@ -263,7 +263,7 @@ const voidSale = async (req, res) => {
             return res.status(400).json({ error: 'Sale ID and password required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
 
         // 1️⃣ Get the sale with ItemsJson
         const saleResult = await pool.request()
@@ -479,7 +479,7 @@ const getSales = async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
 
         // ✅ Check if discount columns exist
         const checkColumns = await pool.request().query(`
@@ -667,7 +667,7 @@ const getSalesSummary = async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Check if discount columns exist
         const checkColumns = await pool.request().query(`
@@ -884,7 +884,7 @@ const getSalesByCategory = async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Check if invoice column exists
         const checkInvoiceColumn = await pool.request().query(`
@@ -1264,7 +1264,7 @@ const getCategoryItems = async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Check if invoice column exists
         const checkInvoiceColumn = await pool.request().query(`

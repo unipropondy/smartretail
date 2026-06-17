@@ -23,7 +23,7 @@ const getEffectiveOutletId = async (req, res, next) => {
         
         // For staff: get their outlet ID from Users table
         if (userRole === 'staff') {
-            const pool = getPool();
+            const pool = await getPool();
             const result = await pool.request()
                 .input('userId', sql.Int, userId)
                 .query('SELECT OutletId FROM Users WHERE Id = @userId');
@@ -48,7 +48,7 @@ const getEffectiveOutletId = async (req, res, next) => {
             }
             
             // Verify outlet belongs to this owner
-            const pool = getPool();
+            const pool = await getPool();
             const result = await pool.request()
                 .input('outletId', sql.Int, outletId)
                 .input('ownerId', sql.Int, userId)

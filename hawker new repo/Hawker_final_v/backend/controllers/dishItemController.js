@@ -11,7 +11,7 @@ const getEffectiveOutletId = async (req) => {
     
     // For staff: get their outlet ID
     if (userRole === 'staff') {
-        const pool = getPool();
+        const pool = await getPool();
         const result = await pool.request()
             .input('userId', sql.Int, userId)
             .query('SELECT OutletId FROM Users WHERE Id = @userId');
@@ -45,7 +45,7 @@ const getAllItems = async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('outletId', sql.Int, outletId)
@@ -99,7 +99,7 @@ const getItemsByCategory = async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Get category name to check if it's Favourites
         const categoryCheck = await pool.request()
@@ -202,7 +202,7 @@ const createItem = async (req, res) => {
         
         const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // Verify category belongs to outlet
         const categoryCheck = await pool.request()
@@ -292,7 +292,7 @@ const updateItem = async (req, res) => {
             outletId 
         });
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // Get current item details (including favourite status)
         const currentItem = await pool.request()
@@ -433,7 +433,7 @@ const deleteItem = async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // Get category and favourite status before deleting
         const item = await pool.request()

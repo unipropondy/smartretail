@@ -11,7 +11,7 @@ const register = async (req, res) => {
         const { username, password, role, fullName, email } = req.body;
 
         // Check if user exists
-        const pool = getPool();
+        const pool = await getPool();
         const existingUser = await pool.request()
             .input('username', sql.NVarChar, username)
             .query('SELECT Id FROM Users WHERE Username = @username');
@@ -71,7 +71,7 @@ const login = async (req, res) => {
             return res.status(400).json({ error: 'Username and password required' });
         }
 
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ First, update expired licenses
         await pool.request()
@@ -281,7 +281,7 @@ const logout = async (req, res) => {
         const token = req.headers.authorization?.split(' ')[1];
         
         if (token) {
-            const pool = getPool();
+            const pool = await getPool();
             
             // Deactivate session
             await pool.request()
@@ -307,7 +307,7 @@ const logout = async (req, res) => {
 const getProfile = async (req, res) => {
     try {
         const userId = req.user.id;
-        const pool = getPool();
+        const pool = await getPool();
 
         const result = await pool.request()
             .input('userId', sql.Int, userId)
@@ -341,7 +341,7 @@ const getProfile = async (req, res) => {
 };
 const getLicenseStatus = async (req, res) => {
     try {
-        const pool = getPool();
+        const pool = await getPool();
         const userId = req.user.id;
         const userRole = req.user.role;
         
@@ -405,7 +405,7 @@ const changePassword = async (req, res) => {
         const userId = req.user.id;
         const { currentPassword, newPassword } = req.body;
 
-        const pool = getPool();
+        const pool = await getPool();
 
         const result = await pool.request()
             .input('userId', sql.Int, userId)

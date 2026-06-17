@@ -8,7 +8,7 @@ const { authenticateToken } = require('../middleware/auth');
 router.get('/yeahpay-settings/:outletId', authenticateToken, async (req, res) => {
     try {
         const { outletId } = req.params;
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('outletId', sql.Int, outletId)
@@ -48,7 +48,7 @@ router.get('/my-yeahpay-settings', authenticateToken, async (req, res) => {
         const userId = req.user.id;
         const userRole = req.user.role;
         
-        const pool = getPool();
+        const pool = await getPool();
         let outletId = null;
         
         // Get outlet ID based on user role

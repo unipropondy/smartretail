@@ -12,7 +12,7 @@ const getEffectiveOutletId = async (req, res, next) => {
         const userRole = req.user.role;
         
         if (userRole === 'staff') {
-            const pool = getPool();
+            const pool = await getPool();
             const result = await pool.request()
                 .input('userId', sql.Int, userId)
                 .query('SELECT OutletId FROM Users WHERE Id = @userId');
@@ -29,7 +29,7 @@ const getEffectiveOutletId = async (req, res, next) => {
                 return res.status(400).json({ error: 'OUTLET_REQUIRED', message: 'Please select an outlet' });
             }
             
-            const pool = getPool();
+            const pool = await getPool();
             const result = await pool.request()
                 .input('outletId', sql.Int, outletId)
                 .input('ownerId', sql.Int, userId)
@@ -68,7 +68,7 @@ router.get('/', async (req, res) => {
         const outletId = req.outletId;
         console.log('📡 Fetching departments for outlet:', outletId); // ✅ Add log
         
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('outletId', sql.Int, outletId)
@@ -94,7 +94,7 @@ router.post('/', async (req, res) => {
         const { name, active, displayOrder } = req.body;
         const outletId = req.outletId;
         
-        const pool = getPool();
+        const pool = await getPool();
         
         let order = displayOrder;
         if (order === undefined) {
@@ -131,7 +131,7 @@ router.put('/:id', async (req, res) => {
         const { name, active, displayOrder } = req.body;
         const outletId = req.outletId;
         
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('id', sql.Int, id)
@@ -168,7 +168,7 @@ router.delete('/:id', async (req, res) => {
         const { id } = req.params;
         const outletId = req.outletId;
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // First, move all categories under this department to NULL
         await pool.request()
@@ -205,7 +205,7 @@ router.post('/update-order', async (req, res) => {
         const { departments } = req.body;
         const outletId = req.outletId;
         
-        const pool = getPool();
+        const pool = await getPool();
         const transaction = pool.transaction();
         await transaction.begin();
         
@@ -241,7 +241,7 @@ router.get('/:departmentId/categories', async (req, res) => {
         const { departmentId } = req.params;
         const outletId = req.outletId;
         
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('departmentId', sql.Int, departmentId)

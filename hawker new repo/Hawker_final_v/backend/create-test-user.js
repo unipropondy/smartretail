@@ -5,7 +5,7 @@ const { getPool, connectDB, sql } = require('./config/db');
 async function createTestUser() {
     try {
         await connectDB();
-        const pool = getPool();
+        const pool = await getPool();
 
         // Hash password 'admin123'
         const hashedPassword = await bcrypt.hash('admin123', 10);

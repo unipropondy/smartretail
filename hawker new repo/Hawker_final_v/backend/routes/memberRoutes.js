@@ -9,7 +9,7 @@ const getOutletId = async (req) => {
     const userRole = req.user.role;
     
     if (userRole === 'staff') {
-        const pool = getPool();
+        const pool = await getPool();
         const result = await pool.request()
             .input('userId', sql.Int, userId)
             .query('SELECT OutletId FROM Users WHERE Id = @userId');
@@ -38,7 +38,7 @@ router.get('/members', authenticateToken, async (req, res) => {
         }
         
         const { search } = req.query;
-        const pool = getPool();
+        const pool = await getPool();
         
         let query = `
             SELECT 
@@ -96,7 +96,7 @@ router.post('/members', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Please enter valid mobile number (8-15 digits)' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         const existing = await pool.request()
             .input('mobile', sql.NVarChar, mobile)
@@ -143,7 +143,7 @@ router.get('/value-cards', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('outletId', sql.Int, outletId)
@@ -185,7 +185,7 @@ router.post('/value-cards', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Member ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // Verify member belongs to outlet
         const memberCheck = await pool.request()
@@ -285,7 +285,7 @@ router.post('/value-cards/use', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Card number and valid amount required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // Start transaction
         const transaction = pool.transaction();
@@ -399,7 +399,7 @@ router.get('/value-cards/member/:cardNumber', authenticateToken, async (req, res
         }
         
         const { cardNumber } = req.params;
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('cardNumber', sql.NVarChar, cardNumber)
@@ -444,7 +444,7 @@ router.post('/value-cards/topup', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Card ID and valid topup amount required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // Start transaction
         const transaction = pool.transaction();
@@ -533,7 +533,7 @@ router.get('/value-cards/:cardId/transactions', authenticateToken, async (req, r
         }
         
         const { cardId } = req.params;
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('cardId', sql.Int, cardId)

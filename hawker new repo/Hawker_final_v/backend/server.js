@@ -254,7 +254,7 @@ app.get('/', (req, res) => {
     });
 });
 const getOwnerId = async (userId) => {
-    const pool = getPool();
+    const pool = await getPool();
     const result = await pool.request()
         .input('userId', sql.Int, userId)
         .query(`
@@ -278,7 +278,7 @@ app.get('/api/user/upi/:userId', authenticateToken, async (req, res) => {
         const ownerId = await getOwnerId(userId);
         console.log(`📱 UPI for user ${userId} (owner: ${ownerId})`);
         
-        const pool = getPool();
+        const pool = await getPool();
         const result = await pool.request()
             .input('userId', sql.Int, ownerId)
             .query('SELECT upi_id FROM users WHERE id = @userId');
@@ -302,7 +302,7 @@ app.get('/api/user/payment-modes/:userId', authenticateToken, async (req, res) =
         const ownerId = await getOwnerId(userId);
         console.log(`📡 Fetching payment modes for user ${userId} (owner: ${ownerId})`);
         
-        const pool = getPool();
+        const pool = await getPool();
         const result = await pool.request()
             .input('userId', ownerId)  // ✅ Use ownerId, not userId!
             .query('SELECT payment_modes FROM user_preferences WHERE user_id = @userId');
@@ -328,7 +328,7 @@ app.put('/api/user/payment-modes', authenticateToken, async (req, res) => {
         const ownerId = await getOwnerId(userId);
         console.log(`💾 Saving payment modes for user ${userId} (owner: ${ownerId}):`, paymentModes);
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Check if OWNER already has payment modes
         const exists = await pool.request()
@@ -368,7 +368,7 @@ app.put('/api/user/update-upi', authenticateToken, async (req, res) => {
         const ownerId = await getOwnerId(userId);
         console.log(`💾 Saving UPI for user ${userId} (owner: ${ownerId}):`, upiId);
         
-        const pool = getPool();
+        const pool = await getPool();
         await pool.request()
             .input('userId', sql.Int, ownerId)
             .input('upiId', upiId)
@@ -386,7 +386,7 @@ app.put('/api/user/update-upi', authenticateToken, async (req, res) => {
 app.get('/api/user/paynow/:userId', authenticateToken, async (req, res) => {
     try {
         const { userId } = req.params;
-        const pool = getPool();  // ✅ CORRECT
+        const pool = await getPool();// ✅ CORRECT
         
         const result = await pool.request()
             .input('userId', userId)
@@ -403,7 +403,7 @@ app.get('/api/user/paynow/:userId', authenticateToken, async (req, res) => {
 app.put('/api/user/update-paynow', authenticateToken, async (req, res) => {
     try {
         const { userId, qrCodeUrl } = req.body;
-        const pool = getPool();  // ✅ CORRECT
+        const pool = await getPool();// ✅ CORRECT
         
         await pool.request()
             .input('userId', userId)

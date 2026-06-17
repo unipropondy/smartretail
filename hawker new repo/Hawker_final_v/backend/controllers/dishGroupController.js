@@ -10,7 +10,7 @@ const getEffectiveOutletId = async (req) => {
     
     // For staff: get their outlet ID
     if (userRole === 'staff') {
-        const pool = getPool();
+        const pool = await getPool();
         const result = await pool.request()
             .input('userId', sql.Int, userId)
             .query('SELECT OutletId FROM Users WHERE Id = @userId');
@@ -37,7 +37,7 @@ const getEffectiveOutletId = async (req) => {
 // ============================================
 const ensureFavouritesGroupExists = async (outletId) => {
     try {
-        const pool = getPool();
+        const pool = await getPool();
         
         // Get actual count of favourite items from DishItem table
         const countResult = await pool.request()
@@ -108,7 +108,7 @@ const getAllGroups = async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Ensure Favourites group has correct count
         await ensureFavouritesGroupExists(outletId);
@@ -161,7 +161,7 @@ const getGroupById = async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         const result = await pool.request()
             .input('id', sql.Int, id)
@@ -196,7 +196,7 @@ const createGroup = async (req, res) => {
             return res.status(403).json({ error: 'Favourites group is automatically managed' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // Get max order for this outlet
         const maxOrderResult = await pool.request()
@@ -241,7 +241,7 @@ const updateGroup = async (req, res) => {
         
         console.log('🔄 Updating group:', { id, name, active, departmentId, outletId });  // ✅ Add debug
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Check if this is Favourites group
         const checkGroup = await pool.request()
@@ -329,7 +329,7 @@ const deleteGroup = async (req, res) => {
             return res.status(400).json({ error: 'Outlet ID required' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Check if this is Favourites group
         const checkGroup = await pool.request()
@@ -408,7 +408,7 @@ const updateGroupOrder = async (req, res) => {
             return res.status(400).json({ error: 'Invalid data format' });
         }
         
-        const pool = getPool();
+        const pool = await getPool();
         
         // ✅ Get Favourites group ID if exists
         const favouritesResult = await pool.request()
@@ -474,7 +474,7 @@ const updateGroupOrder = async (req, res) => {
 // ============================================
 const ensureFavouritesGroup = async (outletId) => {
     try {
-        const pool = getPool();
+        const pool = await getPool();
         
         // Check if Favourites group exists
         const result = await pool.request()
@@ -514,7 +514,7 @@ const ensureFavouritesGroup = async (outletId) => {
 // ============================================
 const updateFavouritesCount = async (outletId, delta) => {
     try {
-        const pool = getPool();
+        const pool = await getPool();
         
         // Get actual count from DishItem table (more reliable)
         const countResult = await pool.request()

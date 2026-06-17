@@ -5,7 +5,7 @@ const { getPool, connectDB, sql } = require('./config/db');
 async function updateUsers() {
     try {
         await connectDB();
-        const pool = getPool();
+        const pool = await getPool();
 
         // Hash passwords
         const adminHash = await bcrypt.hash('admin123', 10);
