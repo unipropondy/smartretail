@@ -40,6 +40,7 @@ import ValueCardPaymentModal from '../components/ValueCardPaymentModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import SettlementReport from '../components/SettlementReport';
+import DayEndModal from '../components/DayEndModal';
 // Add these missing imports at the top with your other imports
 import {
   TextInput,
@@ -446,6 +447,7 @@ const is2LayerMode = layerConfig.layers === 2;
   price: ''
 });
 const isLoadingDepartmentsRef = useRef(false);
+const [showDayEndModal, setShowDayEndModal] = useState(false);
 const [currentLayer, setCurrentLayer] = useState<'department' | 'category' | 'item'>('department');
 const [selectedDepartment, setSelectedDepartment] = useState<{ id: number; name: string } | null>(null);
 const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -787,6 +789,12 @@ const lastCheckTime = useRef<number>(0);
 const CHECK_INTERVAL = 10 * 60 * 1000; // 10 minutes
 const STORAGE_KEY = 'last_drawer_check';
 const [payNowQrUrl, setPayNowQrUrl] = useState('');
+const [dayEndStatus, setDayEndStatus] = useState({
+    isDayEnded: false,
+    pendingSales: 0,
+    currentDayStart: null as string | null,
+    lastDayEnd: null as any
+});
 // ===== SIMPLE HANDLERS =====
 const openStartPicker = () => {
   setPickerType('start');
@@ -2520,6 +2528,57 @@ useEffect(() => {
     
     loadYeahPaySettings();
 }, [outletInfo?.id]);
+ // ============ API FUNCTIONS ============
+  // Add ALL these functions HERE ⬇️
+// Update the useEffect where loadData is called
+useEffect(() => {
+    const loadInitialData = async () => {
+        if (outletInfo?.id) {
+            console.log('📦 Loading initial data for outlet:', outletInfo.id);
+            await loadDataWithDayEnd();
+        }
+    };
+    
+    loadInitialData();
+}, [outletInfo?.id]);
+  // Load dish groups from database
+// In PosScreen.tsx, find where categories are set from dishGroups
+const checkDayEndStatus = async () => {
+    try {
+        console.log('📅 Checking day end status...');
+        const response = await API.get('/dayend/status');
+        
+        if (response.data.success) {
+            setDayEndStatus({
+                isDayEnded: response.data.isDayEnded || false,
+                pendingSales: response.data.pendingSales || 0,
+                currentDayStart: response.data.currentDayStart || null,
+                lastDayEnd: response.data.lastDayEnd || null
+            });
+            
+            console.log('✅ Day end status loaded:', {
+                isDayEnded: response.data.isDayEnded,
+                pendingSales: response.data.pendingSales
+            });
+        }
+    } catch (error) {
+        console.log('❌ Error checking day end status:', error);
+    }
+};
+const loadDataWithDayEnd = async () => {
+    try {
+        // Load all data
+        await loadData();
+        
+        // Check day end status
+        await checkDayEndStatus();
+        
+        console.log('✅ Data and day end status loaded');
+    } catch (error) {
+        console.log('❌ Error loading data:', error);
+    }
+};
+
 // Update handlePaymentSelect
 // In PosScreen.tsx, update handlePaymentSelect function
 // Add this function in PosScreen component
@@ -4306,18 +4365,34 @@ const testSunmiConnection = async () => {
     </TouchableOpacity>
 
     <TouchableOpacity 
-      style={[styles.menuItemBtn, styles.salesReportBtn, { backgroundColor: currentTheme.secondary }]}
+      style={[styles.menuItemBtn, styles.salesReportBtn, { backgroundColor: currentTheme.card,borderColor: currentTheme.border, }]}
       onPress={() => {
         setMenuVisible(false);
         setShowSalesReport(true);
       }}
     >
-      <Text style={styles.menuItemBtnText}>{t.salesReport}</Text>
+      <Text style={[styles.menuItemBtnText, { color: currentTheme.text }]}>{t.salesReport}</Text>
     </TouchableOpacity>
+    
+    {/* Day End Button */}
+    <TouchableOpacity 
+     style={[styles.menuItemBtn, styles.salesReportBtn, { backgroundColor: currentTheme.card,borderColor: currentTheme.border, }]}
+    onPress={() => {
+        setMenuVisible(false);
+        setShowDayEndModal(true);
+    }}
+>
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Ionicons name="calendar-outline" size={20} color={currentTheme.text} />
+        <Text style={[styles.menuItemBtnText, { color: currentTheme.text, marginLeft: 8 }]}>
+            {t.dayEnd}
+        </Text>
+    </View>
+</TouchableOpacity>
 
     <TouchableOpacity 
       style={[styles.menuItemBtn, { 
-        backgroundColor: currentTheme.secondary,
+        backgroundColor: currentTheme.card,
         borderColor: currentTheme.border,
         marginTop: 10
       }]}
@@ -4327,8 +4402,8 @@ const testSunmiConnection = async () => {
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Ionicons name="business-outline" size={20} color="#fff" />
-        <Text style={[styles.menuItemBtnText, { color: '#fff', marginLeft: 8 }]}>
+        <Ionicons name="business-outline" size={20} color={currentTheme.text} />
+        <Text style={[styles.menuItemBtnText, { color: currentTheme.text, marginLeft: 8 }]}>
           {t.companySettings}
         </Text>
       </View>
@@ -4337,7 +4412,7 @@ const testSunmiConnection = async () => {
     {/* Payment Settings Button */}
     <TouchableOpacity 
       style={[styles.menuItemBtn, { 
-        backgroundColor: currentTheme.secondary,
+        backgroundColor: currentTheme.card,
         borderColor: currentTheme.border,
         marginTop: 10
       }]}
@@ -4347,14 +4422,12 @@ const testSunmiConnection = async () => {
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Ionicons name="settings-outline" size={20} color="#fff" />
-        <Text style={[styles.menuItemBtnText, { color: '#fff', marginLeft: 8 }]}>
+        <Ionicons name="settings-outline" size={20} color={currentTheme.text} />
+        <Text style={[styles.menuItemBtnText, { color: currentTheme.text, marginLeft: 8 }]}>
           {t.paymentModes}
         </Text>
       </View>
-      
     </TouchableOpacity>
-
     {/* BOTTOM COMPANY INFO - ALL TEXT IN <Text> */}
     <View style={[styles.bottomInfo, { borderTopColor: currentTheme.border }]}>
       
@@ -5390,7 +5463,25 @@ const renderCashModal = () => {
   t={t}
   formatPrice={formatPrice}
 />
-
+<DayEndModal
+    visible={showDayEndModal}
+    onClose={() => setShowDayEndModal(false)}
+    outletId={outletInfo?.id || 0}
+    theme={currentTheme}
+    t={t}
+    formatPrice={formatPrice}
+    onDayEndComplete={async () => {
+        console.log('🔄 Day end complete - refreshing...');
+        
+        // ✅ Refresh day end status only
+        await checkDayEndStatus();
+        
+        // ✅ Sales report will still show all sales (no change)
+        // ✅ Day end modal will show reset state
+        
+        console.log('✅ Day end refresh complete');
+    }}
+/>
       {/* Profile Modal */}
       <ProfileModal
         visible={showProfileModal}

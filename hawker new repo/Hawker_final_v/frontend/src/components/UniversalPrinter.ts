@@ -261,7 +261,7 @@ static async smartPrint(
       // Sunmi direct print - NO PREVIEW
       const printed = await this.printThermalReceipt(saleData, outletId, undefined, discountInfo);
       if (printed) {
-        Alert.alert('✅ Success', 'Receipt printed!');
+        
         return true;
       }
     }
@@ -517,7 +517,7 @@ static async printSalesReportThermal(reportData: any, userId?: string | number, 
         text += '\n' + '='.repeat(32) + '\n';
         text += this.centerText('END OF REPORT', 32) + '\n';
         text += '='.repeat(32) + '\n\n';
-        text += this.centerText('SMARTHAWKER BY UNIPROSG', 32) + '\n';
+        text += this.centerText('SMARTRETAIL BY UNIPROSG', 32) + '\n';
         text += '\n\n';
         
         await SunmiPrinterService.printRawText(text);
@@ -676,7 +676,7 @@ static async printCategoryReportThermal(
         text += '\n' + '='.repeat(32) + '\n';
         text += this.centerText('END OF REPORT', 32) + '\n';
         text += '='.repeat(32) + '\n\n';
-        text += this.centerText('SMARTHAWKER BY UNIPROSG', 32) + '\n';
+        text += this.centerText('SMARTRETAIL BY UNIPROSG', 32) + '\n';
         
         await SunmiPrinterService.printRawText(text);
         await SunmiPrinterService.cutPaper();

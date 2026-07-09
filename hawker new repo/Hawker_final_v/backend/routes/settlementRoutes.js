@@ -320,7 +320,92 @@ router.delete('/cash-out/:id', authenticateToken, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
+// ============================================
+// 10️⃣ GET SALES DATA FOR SETTLEMENT
+// ============================================
+router.get('/sales-data', authenticateToken, async (req, res) => {
+    try {
+        let { outletId, date } = req.query;
+        
+        outletId = parseInt(outletId);
+        if (isNaN(outletId)) {
+            return res.status(400).json({ error: 'Invalid outletId' });
+        }
+        
+        console.log('📡 Getting sales data for settlement:', { outletId, date });
+        
+        const pool = await getPool();
+        
+        // ✅ Get sales for the date
+        const startDate = new Date(date);
+        startDate.setHours(0, 0, 0, 0);
+        
+        const endDate = new Date(date);
+        endDate.setHours(23, 59, 59, 999);
+        
+        const result = await pool.request()
+            .input('outletId', sql.Int, outletId)
+            .input('startDate', sql.DateTime, startDate)
+            .input('endDate', sql.DateTime, endDate)
+            .query(`
+                SELECT 
+                    COUNT(*) as totalSales,
+                    ISNULL(SUM(Total), 0) as totalRevenue,
+                    ISNULL(SUM(DiscountAmount), 0) as totalDiscount,
+                    -- ✅ Void sales
+                    ISNULL(SUM(CASE WHEN Status = 'VOIDED' THEN Total ELSE 0 END), 0) as voidAmount,
+                    -- ✅ Payment breakdown
+                    ISNULL(SUM(CASE WHEN PaymentMethod = 'Cash' THEN Total ELSE 0 END), 0) as cashAmount,
+                    ISNULL(SUM(CASE WHEN PaymentMethod = 'Card' THEN Total ELSE 0 END), 0) as cardAmount,
+                    ISNULL(SUM(CASE WHEN PaymentMethod = 'UPI' THEN Total ELSE 0 END), 0) as upiAmount,
+                    ISNULL(SUM(CASE WHEN PaymentMethod = 'PayNow' THEN Total ELSE 0 END), 0) as paynowAmount,
+                    ISNULL(SUM(ValueCardAmount), 0) as valueCardAmount,
+                    -- ✅ Net sales (after discount)
+                    ISNULL(SUM(Total - ISNULL(DiscountAmount, 0)), 0) as netSales
+                FROM Sales 
+                WHERE OutletId = @outletId 
+                  AND SaleDate >= @startDate AND SaleDate <= @endDate
+                  AND (Status IS NULL OR Status != 'VOIDED')
+            `);
+        
+        const data = result.recordset[0] || {
+            totalSales: 0,
+            totalRevenue: 0,
+            totalDiscount: 0,
+            voidAmount: 0,
+            cashAmount: 0,
+            cardAmount: 0,
+            upiAmount: 0,
+            paynowAmount: 0,
+            valueCardAmount: 0,
+            netSales: 0
+        };
+        
+        console.log('✅ Settlement sales data:', data);
+        
+        res.json({
+            success: true,
+            data: {
+                totalSales: data.totalSales || 0,
+                totalRevenue: data.totalRevenue || 0,
+                totalDiscount: data.totalDiscount || 0,
+                voidAmount: data.voidAmount || 0,
+                netSales: data.netSales || 0,
+                paymentBreakdown: {
+                    cash: data.cashAmount || 0,
+                    card: data.cardAmount || 0,
+                    upi: data.upiAmount || 0,
+                    paynow: data.paynowAmount || 0,
+                    valueCard: data.valueCardAmount || 0
+                }
+            }
+        });
+        
+    } catch (err) {
+        console.error('❌ Error getting sales data:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
 // ============================================
 // 7️⃣ GET PHYSICAL CASH
 // ============================================

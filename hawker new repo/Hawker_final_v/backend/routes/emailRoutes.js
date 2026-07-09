@@ -3,17 +3,28 @@ const router = express.Router();
 const nodemailer = require('nodemailer');
 const { authenticateToken } = require('../middleware/auth');
 
+// ============================================
+// 1️⃣ SEND SETTLEMENT REPORT EMAIL
+// ============================================
 router.post('/send-settlement-email', authenticateToken, async (req, res) => {
     try {
         const { to, subject, pdfBase64, excelBase64, outletName, cashierName, date } = req.body;
         
-      const transporter = nodemailer.createTransport({
-    service: process.env.EMAIL_SERVICE || 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
+        // ✅ Validate email
+        if (!to || !to.includes('@')) {
+            return res.status(400).json({ error: 'Invalid email address' });
+        }
+        
+        const transporter = nodemailer.createTransport({
+            service: process.env.EMAIL_SERVICE || 'gmail',
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            },
+            tls: {
+                rejectUnauthorized: false
+            }
+        });
         
         const attachments = [];
         
@@ -36,25 +47,162 @@ router.post('/send-settlement-email', authenticateToken, async (req, res) => {
         const mailOptions = {
             from: `"${outletName} POS" <${process.env.EMAIL_USER}>`,
             to: to,
-            subject: subject,
+            subject: subject || `Settlement Report - ${outletName}`,
             html: `
-                <h2>Settlement Report - ${outletName}</h2>
-                <p><strong>Cashier:</strong> ${cashierName}</p>
-                <p><strong>Date:</strong> ${date}</p>
-                <p>Please find attached the settlement report.</p>
-                <hr>
-                <p>This is an auto-generated email from POS System.</p>
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+                    <h2 style="color: #333; text-align: center; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">
+                        📊 Settlement Report - ${outletName}
+                    </h2>
+                    
+                    <div style="padding: 10px 0;">
+                        <p><strong>👤 Cashier:</strong> ${cashierName || 'System'}</p>
+                        <p><strong>📅 Date:</strong> ${date || new Date().toLocaleDateString()}</p>
+                        <p><strong>🕐 Time:</strong> ${new Date().toLocaleTimeString()}</p>
+                    </div>
+                    
+                    <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p style="margin: 0;">Please find attached the settlement report for your review.</p>
+                    </div>
+                    
+                    <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+                    
+                    <div style="text-align: center; color: #666; font-size: 12px;">
+                        <p>This is an auto-generated email from Smart Retail POS System.</p>
+                        <p>© ${new Date().getFullYear()} UNIPRO SOFTWARES SG PTE LTD</p>
+                    </div>
+                </div>
             `,
             attachments: attachments
         };
         
-        await transporter.sendMail(mailOptions);
+        const info = await transporter.sendMail(mailOptions);
         
-        console.log(`✅ Email sent to ${to}`);
-        res.json({ success: true, message: 'Email sent successfully' });
+        console.log(`✅ Settlement email sent to ${to} - Message ID: ${info.messageId}`);
+        res.json({ 
+            success: true, 
+            message: 'Settlement report email sent successfully',
+            messageId: info.messageId 
+        });
         
     } catch (err) {
-        console.error('Email error:', err);
+        console.error('❌ Settlement email error:', err);
+        res.status(500).json({ 
+            error: err.message,
+            details: 'Failed to send settlement report email. Please check email configuration.'
+        });
+    }
+});
+
+// ============================================
+// 2️⃣ SEND DAY END REPORT EMAIL
+// ============================================
+router.post('/send-dayend-email', authenticateToken, async (req, res) => {
+    try {
+        const { to, subject, pdfBase64, csvData, outletName, cashierName, date, dayEndId } = req.body;
+        
+        // ✅ Validate email
+        if (!to || !to.includes('@')) {
+            return res.status(400).json({ error: 'Invalid email address' });
+        }
+        
+        const transporter = nodemailer.createTransport({
+            service: process.env.EMAIL_SERVICE || 'gmail',
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            },
+            tls: {
+                rejectUnauthorized: false
+            }
+        });
+        
+        const attachments = [];
+        
+        if (pdfBase64) {
+            attachments.push({
+                filename: `DayEnd_Report_${date}.pdf`,
+                content: pdfBase64,
+                encoding: 'base64'
+            });
+        }
+        
+        if (csvData) {
+            attachments.push({
+                filename: `DayEnd_Report_${date}.csv`,
+                content: csvData,
+                contentType: 'text/csv'
+            });
+        }
+        
+        const mailOptions = {
+            from: `"${outletName} POS" <${process.env.EMAIL_USER}>`,
+            to: to,
+            subject: subject || `Day End Report - ${outletName} - ${date}`,
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+                    <h2 style="color: #333; text-align: center; border-bottom: 2px solid #FF6B00; padding-bottom: 10px;">
+                        📅 Day End Report - ${outletName}
+                    </h2>
+                    
+                    <div style="padding: 10px 0;">
+                        <p><strong>👤 Cashier:</strong> ${cashierName || 'System'}</p>
+                        <p><strong>📅 Date:</strong> ${date || new Date().toLocaleDateString()}</p>
+                        <p><strong>🕐 Time:</strong> ${new Date().toLocaleTimeString()}</p>
+                        ${dayEndId ? `<p><strong>📋 Day End ID:</strong> #${dayEndId}</p>` : ''}
+                    </div>
+                    
+                    <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p style="margin: 0;">Please find attached the day end report for your review.</p>
+                    </div>
+                    
+                    <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+                    
+                    <div style="text-align: center; color: #666; font-size: 12px;">
+                        <p>This is an auto-generated email from Smart Retail POS System.</p>
+                        <p>© ${new Date().getFullYear()} UNIPRO SOFTWARES SG PTE LTD</p>
+                    </div>
+                </div>
+            `,
+            attachments: attachments
+        };
+        
+        const info = await transporter.sendMail(mailOptions);
+        
+        console.log(`✅ Day End email sent to ${to} - Message ID: ${info.messageId}`);
+        res.json({ 
+            success: true, 
+            message: 'Day End report email sent successfully',
+            messageId: info.messageId 
+        });
+        
+    } catch (err) {
+        console.error('❌ Day End email error:', err);
+        res.status(500).json({ 
+            error: err.message,
+            details: 'Failed to send Day End report email. Please check email configuration.'
+        });
+    }
+});
+
+// ============================================
+// 3️⃣ TEST EMAIL CONFIGURATION
+// ============================================
+router.get('/test-email-config', authenticateToken, async (req, res) => {
+    try {
+        const hasUser = !!process.env.EMAIL_USER;
+        const hasPass = !!process.env.EMAIL_PASS;
+        const hasService = !!process.env.EMAIL_SERVICE;
+        
+        res.json({
+            success: true,
+            config: {
+                service: hasService ? process.env.EMAIL_SERVICE : 'Not set',
+                user: hasUser ? '✅ Set' : '❌ Missing',
+                pass: hasPass ? '✅ Set' : '❌ Missing',
+                status: (hasUser && hasPass && hasService) ? '✅ Ready' : '❌ Incomplete'
+            }
+        });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });

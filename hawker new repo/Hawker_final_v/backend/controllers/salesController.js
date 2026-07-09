@@ -1,5 +1,7 @@
-// backend/controllers/salesController.js
+// backend/controllers/salesController.js - RETAIL FIXED VERSION
+
 const { getPool, sql } = require('../config/db');
+const moment = require('moment-timezone');
 
 // ============================================
 // HELPER FUNCTION - Get effective OUTLET ID
@@ -27,8 +29,9 @@ const getEffectiveOutletId = async (req) => {
     
     return null;
 };
+
 // ============================================
-// CREATE sale (UPDATED)
+// CREATE sale
 // ============================================
 const createSale = async (req, res) => {
     try {
@@ -38,18 +41,13 @@ const createSale = async (req, res) => {
             items, 
             cashPaid, 
             change,
-            
-            // ✅ NEW DISCOUNT FIELDS
             discountType,
             discountValue,
             discountAmount,
             originalTotal,
-            
-            // ✅✅✅ ADD VALUE CARD FIELD ✅✅✅
             valueCardUsed
         } = req.body;
         
-        // ✅ Get outlet ID
         const outletId = req.outletId;
         
         if (!outletId) {
@@ -57,11 +55,8 @@ const createSale = async (req, res) => {
         }
         
         const pool = await getPool();
-        
-        // ✅ GENERATE INVOICE NUMBER
         const invoiceNumber = await generateInvoiceNumber(pool, outletId);
         
-        // Process items with value card info in JSON
         const itemsWithCategory = items.map(item => ({
             id: item.id,
             name: item.name,
@@ -72,24 +67,19 @@ const createSale = async (req, res) => {
             originalCategory: item.originalCategory || item.category
         }));
         
-        // ✅✅✅ CREATE JSON WITH VALUE CARD INFO ✅✅✅
-        const jsonData = {
-            items: itemsWithCategory
-        };
+        const jsonData = { items: itemsWithCategory };
         
-        // Add valueCardUsed if present
         if (valueCardUsed) {
             jsonData.valueCardUsed = {
                 cardNumber: valueCardUsed.cardNumber,
                 memberName: valueCardUsed.memberName,
                 amount: valueCardUsed.amount
             };
-            console.log(`💎 Value Card used: ${valueCardUsed.cardNumber} - ${valueCardUsed.memberName} - ₹${valueCardUsed.amount}`);
+            console.log(`💎 Value Card used: ${valueCardUsed.cardNumber} - ${valueCardUsed.memberName} - $${valueCardUsed.amount}`);
         }
         
         const itemsJson = JSON.stringify(jsonData);
         
-        // ✅ Check if discount columns exist (for backward compatibility)
         const tableCheck = await pool.request().query(`
             SELECT COLUMN_NAME 
             FROM INFORMATION_SCHEMA.COLUMNS 
@@ -99,7 +89,6 @@ const createSale = async (req, res) => {
         
         const hasDiscountColumns = tableCheck.recordset.length >= 3;
         
-        // ✅ Check if InvoiceNumber column exists
         const invoiceColumnCheck = await pool.request().query(`
             SELECT COLUMN_NAME 
             FROM INFORMATION_SCHEMA.COLUMNS 
@@ -118,13 +107,11 @@ const createSale = async (req, res) => {
             .input('changeAmount', sql.Decimal(10,2), change || null)
             .input('outletId', sql.Int, outletId);
         
-        // ✅ Add invoice number if column exists
         if (hasInvoiceColumn) {
             request = request.input('invoiceNumber', sql.NVarChar, invoiceNumber);
         }
         
         if (hasDiscountColumns) {
-            // ✅ With discount columns
             request = request
                 .input('discountType', sql.NVarChar, discountType || null)
                 .input('discountValue', sql.Decimal(10,2), discountValue || null)
@@ -169,7 +156,6 @@ const createSale = async (req, res) => {
                 `;
             }
         } else {
-            // ✅ Without discount columns (fallback)
             if (hasInvoiceColumn) {
                 query = `
                     INSERT INTO Sales (
@@ -204,7 +190,6 @@ const createSale = async (req, res) => {
         
         const result = await request.query(query);
 
-        // ✅ Build response with discount info and value card info
         const newSale = {
             id: result.recordset[0].Id,
             total: result.recordset[0].Total,
@@ -213,19 +198,14 @@ const createSale = async (req, res) => {
             items: itemsWithCategory
         };
         
-        // ✅ Add invoice number if available
         if (hasInvoiceColumn && result.recordset[0].InvoiceNumber) {
             newSale.invoiceNumber = result.recordset[0].InvoiceNumber;
         } else {
-            // Fallback invoice number
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            newSale.invoiceNumber = `${year}${month}${day}-${newSale.id}`;
+            const now = moment().tz('Asia/Singapore');
+            const todayPrefix = now.format('YYYYMMDD');
+            newSale.invoiceNumber = `${todayPrefix}-${newSale.id}`;
         }
         
-        // ✅ Add discount info if present
         if (hasDiscountColumns && discountAmount) {
             newSale.discount = {
                 type: discountType,
@@ -235,14 +215,13 @@ const createSale = async (req, res) => {
             console.log(`💰 Discount applied: ${discountType === 'percentage' ? discountValue + '%' : '$' + discountValue} = $${discountAmount}`);
         }
         
-        // ✅✅✅ Add value card info to response if present ✅✅✅
         if (valueCardUsed) {
             newSale.valueCard = {
                 cardNumber: valueCardUsed.cardNumber,
                 memberName: valueCardUsed.memberName,
                 amount: valueCardUsed.amount
             };
-            console.log(`💎 Value Card in response: ${valueCardUsed.cardNumber} - ₹${valueCardUsed.amount}`);
+            console.log(`💎 Value Card in response: ${valueCardUsed.cardNumber} - $${valueCardUsed.amount}`);
         }
         
         console.log(`✅ ${req.user.role} ${req.user.id} created sale for outlet ${outletId} - Invoice: ${newSale.invoiceNumber}${discountAmount ? ' with discount' : ''}${valueCardUsed ? ' with value card' : ''}`);
@@ -253,6 +232,10 @@ const createSale = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
+
+// ============================================
+// VOID SALE
+// ============================================
 const voidSale = async (req, res) => {
     try {
         const { saleId, password, reason } = req.body;
@@ -265,7 +248,6 @@ const voidSale = async (req, res) => {
         
         const pool = await getPool();
 
-        // 1️⃣ Get the sale with ItemsJson
         const saleResult = await pool.request()
             .input('saleId', sql.Int, saleId)
             .input('outletId', sql.Int, outletId)
@@ -281,12 +263,10 @@ const voidSale = async (req, res) => {
         
         const sale = saleResult.recordset[0];
         
-        // 2️⃣ Check if already voided
         if (sale.Status === 'VOIDED') {
             return res.status(400).json({ error: 'Sale already voided' });
         }
         
-        // 3️⃣ Get outlet's void password
         const outletResult = await pool.request()
             .input('outletId', sql.Int, outletId)
             .query(`
@@ -304,12 +284,10 @@ const voidSale = async (req, res) => {
         
         const outlet = outletResult.recordset[0];
         
-        // 4️⃣ Check if void password is enabled
         if (!outlet.VoidPasswordEnabled || !outlet.VoidPassword) {
             return res.status(403).json({ error: 'Void password not configured. Please contact owner.' });
         }
         
-        // 5️⃣ Verify password
         const bcrypt = require('bcryptjs');
         const isMatch = await bcrypt.compare(password, outlet.VoidPassword);
         
@@ -317,72 +295,57 @@ const voidSale = async (req, res) => {
             return res.status(401).json({ error: 'Invalid void password' });
         }
         
-        // Start transaction
         const transaction = pool.transaction();
         await transaction.begin();
         
-      try {
-    // 6️⃣ Check for value card usage - FIXED
-// 6️⃣ Check for value card usage - FIXED FOR ARRAY FORMAT
-let valueCardNumber = null;
-let valueCardAmount = 0;
-let itemsList = [];
+        try {
+            let valueCardNumber = null;
+            let valueCardAmount = 0;
+            let itemsList = [];
 
-try {
-    let itemsJsonData = sale.ItemsJson;
-    let parsedData = null;
-    
-    console.log('🔍 ItemsJson type:', typeof itemsJsonData);
-    console.log('🔍 Is array:', Array.isArray(itemsJsonData));
-    
-    // Handle different formats
-    if (Array.isArray(itemsJsonData) && itemsJsonData.length > 0) {
-        // It's an array of JSON strings - take the first valid one
-        for (let i = 0; i < itemsJsonData.length; i++) {
             try {
-                const itemStr = itemsJsonData[i];
-                if (typeof itemStr === 'string') {
-                    const parsed = JSON.parse(itemStr);
-                    if (parsed && parsed.items) {
-                        parsedData = parsed;
-                        console.log('✅ Found valid JSON at index', i);
-                        break;
+                let itemsJsonData = sale.ItemsJson;
+                let parsedData = null;
+                
+                if (Array.isArray(itemsJsonData) && itemsJsonData.length > 0) {
+                    for (let i = 0; i < itemsJsonData.length; i++) {
+                        try {
+                            const itemStr = itemsJsonData[i];
+                            if (typeof itemStr === 'string') {
+                                const parsed = JSON.parse(itemStr);
+                                if (parsed && parsed.items) {
+                                    parsedData = parsed;
+                                    break;
+                                }
+                            } else if (typeof itemStr === 'object') {
+                                parsedData = itemStr;
+                                break;
+                            }
+                        } catch(e) {}
                     }
-                } else if (typeof itemStr === 'object') {
-                    parsedData = itemStr;
-                    console.log('✅ Found object at index', i);
-                    break;
+                } 
+                else if (typeof itemsJsonData === 'object' && itemsJsonData !== null) {
+                    parsedData = itemsJsonData;
                 }
-            } catch(e) {}
-        }
-    } 
-    else if (typeof itemsJsonData === 'object' && itemsJsonData !== null) {
-        parsedData = itemsJsonData;
-    }
-    else if (typeof itemsJsonData === 'string') {
-        parsedData = JSON.parse(itemsJsonData);
-    }
-    
-    if (parsedData) {
-        // Extract items
-        if (parsedData.items && Array.isArray(parsedData.items)) {
-            itemsList = parsedData.items;
-        }
-        
-        // Extract value card
-        if (parsedData.valueCardUsed && parsedData.valueCardUsed.amount) {
-            valueCardNumber = parsedData.valueCardUsed.cardNumber;
-            valueCardAmount = parseFloat(parsedData.valueCardUsed.amount);
-        }
-    }
-    
-    console.log('💰 Value card:', { valueCardNumber, valueCardAmount, itemsCount: itemsList.length });
-    
-} catch (e) {
-    console.log('⚠️ Parse error:', e.message);
-}
+                else if (typeof itemsJsonData === 'string') {
+                    parsedData = JSON.parse(itemsJsonData);
+                }
+                
+                if (parsedData) {
+                    if (parsedData.items && Array.isArray(parsedData.items)) {
+                        itemsList = parsedData.items;
+                    }
+                    
+                    if (parsedData.valueCardUsed && parsedData.valueCardUsed.amount) {
+                        valueCardNumber = parsedData.valueCardUsed.cardNumber;
+                        valueCardAmount = parseFloat(parsedData.valueCardUsed.amount);
+                    }
+                }
+                
+            } catch (e) {
+                console.log('⚠️ Parse error:', e.message);
+            }
             
-            // 7️⃣ Refund if value card was used
             let refundAmount = 0;
             if (valueCardNumber && valueCardAmount > 0) {
                 const cardResult = await transaction.request()
@@ -401,7 +364,6 @@ try {
                     const newBalance = oldBalance + valueCardAmount;
                     refundAmount = valueCardAmount;
                     
-                    // Record REFUND transaction
                     await transaction.request()
                         .input('cardId', sql.Int, card.Id)
                         .input('saleId', sql.Int, saleId)
@@ -423,17 +385,15 @@ try {
                             )
                         `);
                     
-                    // Update card balance
                     await transaction.request()
                         .input('cardId', sql.Int, card.Id)
                         .input('balance', sql.Decimal(10,2), newBalance)
                         .query('UPDATE ValueCards SET Balance = @balance WHERE Id = @cardId');
                     
-                    console.log(`✅ Refunded ₹${valueCardAmount} to card ${valueCardNumber}`);
+                    console.log(`✅ Refunded $${valueCardAmount} to card ${valueCardNumber}`);
                 }
             }
             
-            // 8️⃣ Void the sale
             await transaction.request()
                 .input('saleId', sql.Int, saleId)
                 .input('voidedBy', sql.Int, userId)
@@ -449,10 +409,10 @@ try {
             
             await transaction.commit();
             
-            console.log(`✅ Sale ${saleId} voided${refundAmount > 0 ? ` - Refunded ₹${refundAmount}` : ''}`);
+            console.log(`✅ Sale ${saleId} voided${refundAmount > 0 ? ` - Refunded $${refundAmount}` : ''}`);
             res.json({ 
                 success: true, 
-                message: refundAmount > 0 ? `Sale voided and ₹${refundAmount} refunded to value card` : 'Sale voided successfully',
+                message: refundAmount > 0 ? `Sale voided and $${refundAmount} refunded to value card` : 'Sale voided successfully',
                 refundAmount
             });
             
@@ -466,13 +426,13 @@ try {
         res.status(500).json({ error: err.message });
     }
 };
+
 // ============================================
-// GET sales (UPDATED)
+// GET SALES - WITH DayEnd + Custom Time (FIXED)
 // ============================================
 const getSales = async (req, res) => {
     try {
-        const { filter, startDate, endDate, status } = req.query;
-        
+        const { filter, startDate, endDate, status, startTime, endTime, showAll } = req.query;
         const outletId = req.outletId;
         
         if (!outletId) {
@@ -480,107 +440,86 @@ const getSales = async (req, res) => {
         }
         
         const pool = await getPool();
-
-        // ✅ Check if discount columns exist
-        const checkColumns = await pool.request().query(`
-            SELECT COLUMN_NAME 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_NAME = 'Sales' 
-            AND COLUMN_NAME IN ('DiscountType', 'DiscountValue', 'DiscountAmount', 'InvoiceNumber')
-        `);
         
-        const hasDiscountColumns = checkColumns.recordset.some(c => ['DiscountType', 'DiscountValue', 'DiscountAmount'].includes(c.COLUMN_NAME));
-        const hasInvoiceColumn = checkColumns.recordset.some(c => c.COLUMN_NAME === 'InvoiceNumber');
+        // ✅ FIX: Use UTC time from database
+        const timeResult = await pool.request()
+            .query('SELECT GETUTCDATE() as utcNow, CAST(GETUTCDATE() AS DATE) as todayUTC');
+        const utcNow = timeResult.recordset[0].utcNow;
+        const todayUTC = timeResult.recordset[0].todayUTC;
         
-        // ✅ Check if void columns exist
-        const checkVoidColumns = await pool.request().query(`
-            SELECT COLUMN_NAME 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_NAME = 'Sales' 
-            AND COLUMN_NAME IN ('Status', 'VoidedBy', 'VoidedAt', 'VoidReason')
-        `);
+        console.log('📅 UTC now:', utcNow);
+        console.log('📅 Today UTC:', todayUTC);
         
-        const hasVoidColumns = checkVoidColumns.recordset.length >= 2;
-        
-        // ✅ Build query with all columns
         let query = `
             SELECT Id, Total, PaymentMethod, SaleDate, 
                    CAST(ItemsJson AS NVARCHAR(MAX)) as ItemsJson,
-                   CashPaid, ChangeAmount
-        `;
-        
-        // ✅ ADD INVOICE NUMBER
-        if (hasInvoiceColumn) {
-            query += `, InvoiceNumber`;
-        } else {
-            query += `, NULL as InvoiceNumber`;
-        }
-        
-        // Add discount columns if they exist
-        if (hasDiscountColumns) {
-            query += `, DiscountType, DiscountValue, DiscountAmount`;
-        }
-        
-        // Add void columns if they exist
-        if (hasVoidColumns) {
-            query += `, Status, VoidedBy, VoidedAt, VoidReason`;
-        } else {
-            query += `, 'COMPLETED' as Status, NULL as VoidedBy, NULL as VoidedAt, NULL as VoidReason`;
-        }
-        
-        // ✅ ADD Value Card fields
-        query += `
-            , JSON_VALUE(ItemsJson, '$.valueCardUsed.cardNumber') as ValueCardNumber
-            , JSON_VALUE(ItemsJson, '$.valueCardUsed.memberName') as ValueCardMember
-            , CAST(JSON_VALUE(ItemsJson, '$.valueCardUsed.amount') AS DECIMAL(10,2)) as ValueCardAmount
-        `;
-        
-        query += `
+                   CashPaid, ChangeAmount,
+                   InvoiceNumber,
+                   DiscountType, DiscountValue, DiscountAmount,
+                   Status, VoidedBy, VoidedAt, VoidReason,
+                   DayEndId
             FROM Sales WITH (NOLOCK) 
             WHERE OutletId = @outletId
         `;
         
         const request = pool.request();
         request.input('outletId', sql.Int, outletId);
-
-        // Filter by status
-        if (status === 'voided') {
-            query += ' AND Status = \'VOIDED\'';
-        } else if (status === 'completed') {
-            query += ' AND (Status IS NULL OR Status = \'COMPLETED\' OR Status != \'VOIDED\')';
+        
+        // ✅ DayEndId filter based on showAll
+        if (showAll === 'true') {
+            console.log('📊 Sales Report: Showing ALL sales');
+            // No DayEndId filter - shows all sales
         } else {
-            if (hasVoidColumns) {
-                query += ' AND (Status IS NULL OR Status != \'VOIDED\')';
-            }
+            console.log('📊 Day End: Showing ONLY pending sales');
+            query += " AND (DayEndId IS NULL OR DayEndId = 0)";
         }
-
-        // Date filters
+        
+        // ✅ Status filter
+        if (status === 'voided') {
+            query += " AND Status = 'VOIDED'";
+        } else {
+            query += " AND (Status IS NULL OR Status = 'COMPLETED' OR Status != 'VOIDED')";
+        }
+        
+        // ✅ Date filters - use UTC!
         if (filter === 'today') {
-            query += ' AND CAST(SaleDate AS DATE) = CAST(GETDATE() AS DATE)';
-        } 
-        else if (filter === 'week') {
-            query += ' AND SaleDate >= DATEADD(day, -7, GETDATE())';
-        } 
-        else if (filter === 'month') {
-            query += ' AND SaleDate >= DATEADD(month, -1, GETDATE())';
-        } 
-        else if (filter === 'custom' && startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
+            query += " AND CAST(SaleDate AS DATE) = @todayDate";
+            request.input('todayDate', sql.Date, todayUTC);
             
-            start.setHours(0, 0, 0, 0);
-            end.setHours(23, 59, 59, 999);
+        } else if (filter === 'week') {
+            const weekStart = new Date(utcNow);
+            weekStart.setDate(weekStart.getDate() - 7);
+            weekStart.setHours(0, 0, 0, 0);
             
-            query += ' AND SaleDate >= @startDate AND SaleDate <= @endDate';
+            query += " AND SaleDate >= @weekStart";
+            request.input('weekStart', sql.DateTime, weekStart);
+            
+        } else if (filter === 'month') {
+            const monthStart = new Date(utcNow);
+            monthStart.setDate(monthStart.getDate() - 30);
+            monthStart.setHours(0, 0, 0, 0);
+            
+            query += " AND SaleDate >= @monthStart";
+            request.input('monthStart', sql.DateTime, monthStart);
+            
+        } else if (filter === 'custom' && startDate && endDate) {
+            // ✅ FIX: Use UTC directly!
+            const start = new Date(`${startDate}T${startTime || '00:00'}:00.000Z`);
+            const end = new Date(`${endDate}T${endTime || '23:59'}:59.999Z`);
+            
+            console.log('📅 Custom start (UTC):', start.toISOString());
+            console.log('📅 Custom end (UTC):', end.toISOString());
+            
+            query += " AND SaleDate >= @startDate AND SaleDate <= @endDate";
             request.input('startDate', sql.DateTime, start);
             request.input('endDate', sql.DateTime, end);
         }
-
-        query += ' ORDER BY SaleDate DESC';
         
+        query += " ORDER BY SaleDate DESC";
+        
+        console.log("📊 Executing sales query with showAll:", showAll);
         const result = await request.query(query);
         
-        // ✅ Parse JSON with proper format handling (new format with {items, valueCardUsed})
         const formattedSales = result.recordset.map(sale => {
             let items = [];
             let valueCardInfo = null;
@@ -588,41 +527,20 @@ const getSales = async (req, res) => {
             try {
                 const parsed = JSON.parse(sale.ItemsJson || '{}');
                 
-                // Check if new format (has items array)
                 if (parsed.items && Array.isArray(parsed.items)) {
                     items = parsed.items;
                     valueCardInfo = parsed.valueCardUsed || null;
-                } 
-                // Check if old format (array directly)
-                else if (Array.isArray(parsed)) {
+                } else if (Array.isArray(parsed)) {
                     items = parsed;
-                }
-                // Empty or invalid
-                else {
+                } else {
                     items = [];
                 }
             } catch (e) {
                 console.log('Error parsing ItemsJson for sale:', sale.Id, e.message);
                 items = [];
             }
-            let singaporeDate = sale.SaleDate;
-        if (sale.SaleDate) {
-            const dbDate = new Date(sale.SaleDate);
-            // Subtract 8 hours (8 * 60 * 60 * 1000 = 28,800,000 ms)
-            singaporeDate = new Date(dbDate.getTime() - (8 * 60 * 60 * 1000));
-            console.log('📅 UTC DB:', dbDate.toISOString());
-            console.log('📅 Singapore (UTC-8):', singaporeDate.toLocaleString());
-        }
-            // Use valueCard from parsed JSON if available, otherwise from SQL extraction
-            if (!valueCardInfo && sale.ValueCardAmount && sale.ValueCardAmount > 0) {
-                valueCardInfo = {
-                    cardNumber: sale.ValueCardNumber,
-                    memberName: sale.ValueCardMember,
-                    amount: sale.ValueCardAmount
-                };
-            }
             
-            const discount = (hasDiscountColumns && sale.DiscountAmount) ? {
+            const discount = (sale.DiscountAmount) ? {
                 type: sale.DiscountType,
                 value: sale.DiscountValue,
                 amount: sale.DiscountAmount
@@ -632,7 +550,7 @@ const getSales = async (req, res) => {
                 id: sale.Id,
                 total: sale.Total,
                 paymentMethod: sale.PaymentMethod,
-                date: singaporeDate,
+                date: sale.SaleDate,
                 invoiceNumber: sale.InvoiceNumber || '',
                 items: items,
                 cashPaid: sale.CashPaid,
@@ -642,10 +560,11 @@ const getSales = async (req, res) => {
                 voidReason: sale.VoidReason,
                 voidedAt: sale.VoidedAt,
                 voidedBy: sale.VoidedBy,
-                valueCard: valueCardInfo
+                valueCard: valueCardInfo,
+                dayEndId: sale.DayEndId
             };
         });
-
+        
         console.log(`✅ ${req.user.role} ${req.user.id} fetched ${formattedSales.length} sales (${status || 'completed'}) for outlet ${outletId}`);
         res.json(formattedSales);
         
@@ -654,13 +573,13 @@ const getSales = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
+
 // ============================================
-// GET sales summary with DISCOUNT (UPDATED)
+// GET SALES SUMMARY - With DayEnd + Value Card (FIXED)
 // ============================================
 const getSalesSummary = async (req, res) => {
     try {
-        const { filter, startDate, endDate, status } = req.query;
-        
+        const { filter, startDate, endDate, status, startTime, endTime, showAll } = req.query;
         const outletId = req.outletId;
         
         if (!outletId) {
@@ -669,232 +588,14 @@ const getSalesSummary = async (req, res) => {
         
         const pool = await getPool();
         
-        // ✅ Check if discount columns exist
-        const checkColumns = await pool.request().query(`
-            SELECT COLUMN_NAME 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_NAME = 'Sales' 
-            AND COLUMN_NAME IN ('DiscountType', 'DiscountValue', 'DiscountAmount')
-        `);
+        // ✅ FIX: Use UTC time from database
+        const timeResult = await pool.request()
+            .query('SELECT GETUTCDATE() as utcNow, CAST(GETUTCDATE() AS DATE) as todayUTC');
+        const utcNow = timeResult.recordset[0].utcNow;
+        const todayUTC = timeResult.recordset[0].todayUTC;
         
-        const hasDiscountColumns = checkColumns.recordset.length >= 3;
-        
-        // ✅ Check if Status column exists (for void support)
-        const checkStatusColumn = await pool.request().query(`
-            SELECT COLUMN_NAME 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_NAME = 'Sales' 
-            AND COLUMN_NAME = 'Status'
-        `);
-        
-        const hasStatusColumn = checkStatusColumn.recordset.length > 0;
-        
-        // ✅ Build query with discount calculations and value card - FIXED JSON PARSING
-        let query = `
-            WITH SalesWithDetails AS (
-                SELECT 
-                    Id,
-                    Total,
-                    PaymentMethod,
-                    -- ✅ Handle both old and new JSON formats
-                    CASE 
-                        -- Check if new format (has $.items)
-                        WHEN ISJSON(ItemsJson) = 1 AND JSON_VALUE(ItemsJson, '$.items') IS NOT NULL
-                        THEN (
-                            SELECT ISNULL(SUM(TRY_CAST(JSON_VALUE(value, '$.quantity') AS INT)), 0)
-                            FROM OPENJSON(ItemsJson, '$.items')
-                        )
-                        -- Old format (array directly)
-                        ELSE (
-                            SELECT ISNULL(SUM(TRY_CAST(JSON_VALUE(value, '$.quantity') AS INT)), 0)
-                            FROM OPENJSON(ItemsJson)
-                        )
-                    END as ItemCount
-        `;
-        
-        // Add discount fields if they exist
-        if (hasDiscountColumns) {
-            query += `,
-                    DiscountAmount,
-                    DiscountType,
-                    DiscountValue,
-                    CASE WHEN DiscountAmount > 0 THEN 1 ELSE 0 END as HasDiscount
-            `;
-        }
-        
-        // Add Status if exists
-        if (hasStatusColumn) {
-            query += `,
-                    Status
-            `;
-        }
-        
-        // ✅ ADD Value Card fields - Handle both formats
-        query += `
-                , COALESCE(
-                    CAST(JSON_VALUE(ItemsJson, '$.valueCardUsed.amount') AS DECIMAL(10,2)),
-                    CAST(JSON_VALUE(ItemsJson, '$.valueCardUsed.amount') AS DECIMAL(10,2)),
-                    0
-                ) as ValueCardAmount
-                , JSON_VALUE(ItemsJson, '$.valueCardUsed.cardNumber') as ValueCardNumber
-                , JSON_VALUE(ItemsJson, '$.valueCardUsed.memberName') as ValueCardMember
-        `;
-        
-        query += `
-                FROM Sales WITH (NOLOCK)
-                WHERE OutletId = @outletId
-        `;
-        
-        const request = pool.request();
-        request.input('outletId', sql.Int, outletId);
-
-        // ✅ FILTER BY STATUS (VOIDED or COMPLETED)
-        if (hasStatusColumn) {
-            if (status === 'voided') {
-                query += ' AND Status = \'VOIDED\'';
-            } else if (status === 'completed') {
-                query += ' AND (Status IS NULL OR Status = \'COMPLETED\' OR Status != \'VOIDED\')';
-            } else {
-                query += ' AND (Status IS NULL OR Status != \'VOIDED\')';
-            }
-        }
-
-        // Date filters
-        if (filter === 'today') {
-            query += ' AND CAST(SaleDate AS DATE) = CAST(GETDATE() AS DATE)';
-        } 
-        else if (filter === 'week') {
-            query += ' AND SaleDate >= DATEADD(day, -7, GETDATE())';
-        } 
-        else if (filter === 'month') {
-            query += ' AND SaleDate >= DATEADD(month, -1, GETDATE())';
-        } 
-        else if (filter === 'custom' && startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            start.setHours(0, 0, 0, 0);
-            end.setHours(23, 59, 59, 999);
-            
-            query += ' AND SaleDate >= @startDate AND SaleDate <= @endDate';
-            request.input('startDate', sql.DateTime, start);
-            request.input('endDate', sql.DateTime, end);
-        }
-
-        query += `
-            )
-            SELECT 
-                COUNT(*) as totalSales,
-                ISNULL(SUM(Total), 0) as totalRevenue,
-                ISNULL(SUM(ItemCount), 0) as totalItems,
-                PaymentMethod
-        `;
-        
-        // Add discount aggregates if columns exist
-        if (hasDiscountColumns) {
-            query += `,
-                ISNULL(SUM(DiscountAmount), 0) as totalDiscount,
-                SUM(CASE WHEN DiscountAmount > 0 THEN 1 ELSE 0 END) as discountedSales
-            `;
-        } else {
-            query += `,
-                0 as totalDiscount,
-                0 as discountedSales
-            `;
-        }
-        
-        // ✅ ADD Value Card aggregates
-        query += `,
-                ISNULL(SUM(ValueCardAmount), 0) as totalValueCardAmount,
-                SUM(CASE WHEN ValueCardAmount > 0 THEN 1 ELSE 0 END) as valueCardTransactions
-        `;
-        
-        query += `
-            FROM SalesWithDetails
-            GROUP BY PaymentMethod
-        `;
-        
-        const result = await request.query(query);
-        
-        // Calculate totals
-        let totalRevenue = 0;
-        let totalItems = 0;
-        let totalSales = 0;
-        let totalDiscount = 0;
-        let discountedSales = 0;
-        let totalValueCardAmount = 0;
-        let valueCardTransactions = 0;
-        const paymentBreakdown = {};
-        
-        result.recordset.forEach(row => {
-            totalRevenue += row.totalRevenue;
-            totalItems += parseInt(row.totalItems || 0);
-            totalSales += row.totalSales;
-            totalDiscount += row.totalDiscount || 0;
-            discountedSales += row.discountedSales || 0;
-            totalValueCardAmount += row.totalValueCardAmount || 0;
-            valueCardTransactions += row.valueCardTransactions || 0;
-            paymentBreakdown[row.PaymentMethod] = row.totalRevenue;
-        });
-
-        // ✅ Add value card to payment breakdown
-        if (totalValueCardAmount > 0) {
-            paymentBreakdown['Value Card'] = totalValueCardAmount;
-        }
-
-        console.log(`✅ Summary for outlet ${outletId} (${status || 'completed'}):`, { 
-            totalSales, 
-            totalRevenue, 
-            totalItems, 
-            totalDiscount,
-            discountedSales,
-            discountPercent: totalSales > 0 ? ((discountedSales / totalSales) * 100).toFixed(1) : 0,
-            totalValueCardAmount,
-            valueCardTransactions
-        });
-
-        res.json({
-            totalSales,
-            totalRevenue,
-            totalItems,
-            totalDiscount,
-            discountedSales,
-            paymentBreakdown,
-            totalValueCardAmount,
-            valueCardTransactions
-        });
-        
-    } catch (err) {
-        console.error('❌ Error getting sales summary:', err);
-        res.status(500).json({ error: err.message });
-    }
-};
-// ============================================
-// GET sales by category (UPDATED)
-// ============================================
-// ============================================
-// GET sales by category with DISCOUNT (UPDATED)
-// ============================================
-const getSalesByCategory = async (req, res) => {
-    try {
-        const { filter, startDate, endDate, status } = req.query;
-        
-        const outletId = req.outletId;
-        
-        if (!outletId) {
-            return res.status(400).json({ error: 'Outlet ID required' });
-        }
-        
-        const pool = await getPool();
-        
-        // ✅ Check if invoice column exists
-        const checkInvoiceColumn = await pool.request().query(`
-            SELECT COLUMN_NAME 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_NAME = 'Sales' 
-            AND COLUMN_NAME = 'InvoiceNumber'
-        `);
-        
-        const hasInvoiceColumn = checkInvoiceColumn.recordset.length > 0;
+        console.log('📅 UTC now (summary):', utcNow);
+        console.log('📅 Today UTC (summary):', todayUTC);
         
         // ✅ Check if discount columns exist
         const checkColumns = await pool.request().query(`
@@ -916,7 +617,249 @@ const getSalesByCategory = async (req, res) => {
         
         const hasStatusColumn = checkStatusColumn.recordset.length > 0;
         
-        // ✅ Build query - include InvoiceNumber
+        // ✅ Check if DayEndId column exists
+        const checkDayEndColumn = await pool.request().query(`
+            SELECT COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'Sales' 
+            AND COLUMN_NAME = 'DayEndId'
+        `);
+        
+        const hasDayEndColumn = checkDayEndColumn.recordset.length > 0;
+        
+        // ✅ Build query
+        let query = `
+            WITH SalesWithDetails AS (
+                SELECT 
+                    Id,
+                    Total,
+                    PaymentMethod,
+                    ISNULL(
+    (SELECT SUM(CAST(JSON_VALUE(value, '$.quantity') AS INT)) 
+              FROM OPENJSON(ItemsJson, '$.items')),
+              0
+               ) as ItemCount
+        `;
+        
+        if (hasDiscountColumns) {
+            query += `,
+                    DiscountAmount,
+                    DiscountType,
+                    DiscountValue,
+                    CASE WHEN DiscountAmount > 0 THEN 1 ELSE 0 END as HasDiscount`;
+        }
+        
+        if (hasStatusColumn) {
+            query += `,
+                    Status`;
+        }
+        
+        if (hasDayEndColumn) {
+            query += `,
+                    DayEndId`;
+        }
+        
+        query += `
+                , COALESCE(
+                    CAST(JSON_VALUE(ItemsJson, '$.valueCardUsed.amount') AS DECIMAL(10,2)),
+                    0
+                ) as ValueCardAmount
+                , JSON_VALUE(ItemsJson, '$.valueCardUsed.cardNumber') as ValueCardNumber
+                , JSON_VALUE(ItemsJson, '$.valueCardUsed.memberName') as ValueCardMember
+                FROM Sales WITH (NOLOCK)
+                WHERE OutletId = @outletId`;
+        
+        const request = pool.request();
+        request.input('outletId', sql.Int, outletId);
+
+        // ✅ DayEndId filter based on showAll
+        if (showAll === 'true') {
+            console.log('📊 Summary: Showing ALL sales');
+            // No DayEndId filter - shows all sales
+        } else {
+            console.log('📊 Summary: Showing ONLY pending sales (DayEndId IS NULL)');
+            if (hasDayEndColumn) {
+                query += " AND (DayEndId IS NULL OR DayEndId = 0)";
+            }
+        }
+
+        // ✅ Status filters
+        if (hasStatusColumn) {
+            if (status === 'voided') {
+                query += " AND Status = 'VOIDED'";
+            } else {
+                query += " AND (Status IS NULL OR Status = 'COMPLETED' OR Status != 'VOIDED')";
+            }
+        }
+        
+        // ✅ Date filters - use UTC!
+        if (filter === 'today') {
+            query += " AND CAST(SaleDate AS DATE) = @todayDate";
+            request.input('todayDate', sql.Date, todayUTC);
+            
+        } else if (filter === 'week') {
+            const weekStart = new Date(utcNow);
+            weekStart.setDate(weekStart.getDate() - 7);
+            weekStart.setHours(0, 0, 0, 0);
+            
+            query += " AND SaleDate >= @weekStart";
+            request.input('weekStart', sql.DateTime, weekStart);
+            
+        } else if (filter === 'month') {
+            const monthStart = new Date(utcNow);
+            monthStart.setDate(monthStart.getDate() - 30);
+            monthStart.setHours(0, 0, 0, 0);
+            
+            query += " AND SaleDate >= @monthStart";
+            request.input('monthStart', sql.DateTime, monthStart);
+            
+        } else if (filter === 'custom' && startDate && endDate) {
+            // ✅ FIX: Use UTC directly!
+            const start = new Date(`${startDate}T${startTime || '00:00'}:00.000Z`);
+            const end = new Date(`${endDate}T${endTime || '23:59'}:59.999Z`);
+            
+            console.log('📅 Custom start (UTC):', start.toISOString());
+            console.log('📅 Custom end (UTC):', end.toISOString());
+            
+            query += " AND SaleDate >= @startDate AND SaleDate <= @endDate";
+            request.input('startDate', sql.DateTime, start);
+            request.input('endDate', sql.DateTime, end);
+        }
+        
+        query += `
+            )
+            SELECT 
+                COUNT(*) as totalSales,
+                ISNULL(SUM(Total), 0) as totalRevenue,
+                ISNULL(SUM(ItemCount), 0) as totalItems,
+                PaymentMethod
+        `;
+        
+        if (hasDiscountColumns) {
+            query += `,
+                ISNULL(SUM(DiscountAmount), 0) as totalDiscount,
+                SUM(CASE WHEN DiscountAmount > 0 THEN 1 ELSE 0 END) as discountedSales`;
+        } else {
+            query += `,
+                0 as totalDiscount,
+                0 as discountedSales`;
+        }
+        
+        query += `,
+                ISNULL(SUM(ValueCardAmount), 0) as totalValueCardAmount,
+                SUM(CASE WHEN ValueCardAmount > 0 THEN 1 ELSE 0 END) as valueCardTransactions
+        `;
+        
+        query += ` FROM SalesWithDetails GROUP BY PaymentMethod`;
+        
+        console.log("📊 Executing summary query with showAll:", showAll);
+        const result = await request.query(query);
+        
+        let totalRevenue = 0, totalItems = 0, totalSales = 0, totalDiscount = 0, discountedSales = 0;
+        let totalValueCardAmount = 0, valueCardTransactions = 0;
+        const paymentBreakdown = {};
+        
+        result.recordset.forEach(row => {
+            totalRevenue += row.totalRevenue;
+            totalItems += parseInt(row.totalItems || 0);
+            totalSales += row.totalSales;
+            totalDiscount += row.totalDiscount || 0;
+            discountedSales += row.discountedSales || 0;
+            totalValueCardAmount += row.totalValueCardAmount || 0;
+            valueCardTransactions += row.valueCardTransactions || 0;
+            paymentBreakdown[row.PaymentMethod] = row.totalRevenue;
+        });
+
+        if (totalValueCardAmount > 0) {
+            paymentBreakdown['Value Card'] = totalValueCardAmount;
+        }
+
+        console.log(`✅ Summary for outlet ${outletId} (${status || 'completed'}):`, { 
+            totalSales, 
+            totalRevenue, 
+            totalItems, 
+            totalDiscount,
+            discountedSales,
+            totalValueCardAmount,
+            valueCardTransactions
+        });
+
+        res.json({
+            totalSales,
+            totalRevenue,
+            totalItems,
+            totalDiscount,
+            discountedSales,
+            paymentBreakdown,
+            totalValueCardAmount,
+            valueCardTransactions
+        });
+        
+    } catch (err) {
+        console.error('❌ Error getting sales summary:', err);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+// ============================================
+// GET SALES BY CATEGORY - With DayEnd + Value Card (FIXED)
+// ============================================
+const getSalesByCategory = async (req, res) => {
+    try {
+        const { filter, startDate, endDate, status, startTime, endTime } = req.query;
+        const outletId = req.outletId;
+        
+        if (!outletId) {
+            return res.status(400).json({ error: 'Outlet ID required' });
+        }
+        
+        const pool = await getPool();
+        
+        // ✅ FIX: Use UTC time from database
+        const timeResult = await pool.request()
+            .query('SELECT GETUTCDATE() as utcNow, CAST(GETUTCDATE() AS DATE) as todayUTC');
+        const utcNow = timeResult.recordset[0].utcNow;
+        const todayUTC = timeResult.recordset[0].todayUTC;
+        
+        console.log('📅 UTC now (category):', utcNow);
+        console.log('📅 Today UTC (category):', todayUTC);
+        
+        const checkInvoiceColumn = await pool.request().query(`
+            SELECT COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'Sales' 
+            AND COLUMN_NAME = 'InvoiceNumber'
+        `);
+        
+        const hasInvoiceColumn = checkInvoiceColumn.recordset.length > 0;
+        
+        const checkColumns = await pool.request().query(`
+            SELECT COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'Sales' 
+            AND COLUMN_NAME IN ('DiscountType', 'DiscountValue', 'DiscountAmount')
+        `);
+        
+        const hasDiscountColumns = checkColumns.recordset.length >= 3;
+        
+        const checkStatusColumn = await pool.request().query(`
+            SELECT COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'Sales' 
+            AND COLUMN_NAME = 'Status'
+        `);
+        
+        const hasStatusColumn = checkStatusColumn.recordset.length > 0;
+        
+        const checkDayEndColumn = await pool.request().query(`
+            SELECT COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'Sales' 
+            AND COLUMN_NAME = 'DayEndId'
+        `);
+        
+        const hasDayEndColumn = checkDayEndColumn.recordset.length > 0;
+        
         let query = `
             SELECT Id, Total, CAST(ItemsJson AS NVARCHAR(MAX)) as ItemsJson, SaleDate
         `;
@@ -933,7 +876,10 @@ const getSalesByCategory = async (req, res) => {
             query += `, Status`;
         }
         
-        // ✅ Add Value Card fields
+        if (hasDayEndColumn) {
+            query += `, DayEndId`;
+        }
+        
         query += `
             , JSON_VALUE(ItemsJson, '$.valueCardUsed.cardNumber') as ValueCardNumber
             , JSON_VALUE(ItemsJson, '$.valueCardUsed.memberName') as ValueCardMember
@@ -948,7 +894,10 @@ const getSalesByCategory = async (req, res) => {
         const request = pool.request();
         request.input('outletId', sql.Int, outletId);
 
-        // Filter by status
+        // ✅ DayEnd Filter - always show ALL for categories
+        console.log('📊 Categories: Showing ALL sales (ignoring DayEndId)');
+        // No DayEndId filter - shows all sales
+
         if (hasStatusColumn) {
             if (status === 'voided') {
                 query += ' AND Status = \'VOIDED\'';
@@ -957,21 +906,34 @@ const getSalesByCategory = async (req, res) => {
             }
         }
 
-        // Date filters
+        // ✅ Date filters - use UTC!
         if (filter === 'today') {
-            query += ' AND CAST(SaleDate AS DATE) = CAST(GETDATE() AS DATE)';
-        } 
-        else if (filter === 'week') {
-            query += ' AND SaleDate >= DATEADD(day, -7, GETDATE())';
-        } 
-        else if (filter === 'month') {
-            query += ' AND SaleDate >= DATEADD(month, -1, GETDATE())';
-        } 
-        else if (filter === 'custom' && startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            start.setHours(0, 0, 0, 0);
-            end.setHours(23, 59, 59, 999);
+            query += " AND CAST(SaleDate AS DATE) = @todayDate";
+            request.input('todayDate', sql.Date, todayUTC);
+            
+        } else if (filter === 'week') {
+            const weekStart = new Date(utcNow);
+            weekStart.setDate(weekStart.getDate() - 7);
+            weekStart.setHours(0, 0, 0, 0);
+            
+            query += " AND SaleDate >= @weekStart";
+            request.input('weekStart', sql.DateTime, weekStart);
+            
+        } else if (filter === 'month') {
+            const monthStart = new Date(utcNow);
+            monthStart.setDate(monthStart.getDate() - 30);
+            monthStart.setHours(0, 0, 0, 0);
+            
+            query += " AND SaleDate >= @monthStart";
+            request.input('monthStart', sql.DateTime, monthStart);
+            
+        } else if (filter === 'custom' && startDate && endDate) {
+            // ✅ FIX: Use UTC directly!
+            const start = new Date(`${startDate}T${startTime || '00:00'}:00.000Z`);
+            const end = new Date(`${endDate}T${endTime || '23:59'}:59.999Z`);
+            
+            console.log('📅 Custom start (UTC):', start.toISOString());
+            console.log('📅 Custom end (UTC):', end.toISOString());
             
             query += ' AND SaleDate >= @startDate AND SaleDate <= @endDate';
             request.input('startDate', sql.DateTime, start);
@@ -980,7 +942,6 @@ const getSalesByCategory = async (req, res) => {
 
         const result = await request.query(query);
         
-        // ✅ Process data - FIXED JSON PARSING
         const categoryMap = new Map();
         const transactionSet = new Set();
         let totalDiscountAmount = 0;
@@ -991,20 +952,17 @@ const getSalesByCategory = async (req, res) => {
         result.recordset.forEach(sale => {
             transactionSet.add(sale.Id);
             
-            // Track discount
             if (hasDiscountColumns && sale.DiscountAmount && sale.DiscountAmount > 0) {
                 totalDiscountAmount += sale.DiscountAmount;
                 discountedTransactionCount++;
             }
             
-            // Track Value Card
             if (sale.ValueCardAmount && sale.ValueCardAmount > 0) {
                 totalValueCardAmount += parseFloat(sale.ValueCardAmount);
                 valueCardTransactionCount++;
             }
             
             try {
-                // ✅ FIXED: Parse ItemsJson properly - handle both formats
                 let parsedData = null;
                 try {
                     parsedData = JSON.parse(sale.ItemsJson || '{}');
@@ -1013,13 +971,10 @@ const getSalesByCategory = async (req, res) => {
                     return;
                 }
                 
-                // Extract items based on format
                 let itemsList = [];
                 if (parsedData.items && Array.isArray(parsedData.items)) {
-                    // New format: { items: [...], valueCardUsed: {...} }
                     itemsList = parsedData.items;
                 } else if (Array.isArray(parsedData)) {
-                    // Old format: [...] directly
                     itemsList = parsedData;
                 } else {
                     itemsList = [];
@@ -1057,7 +1012,6 @@ const getSalesByCategory = async (req, res) => {
                     category.totalRevenue += discountedRevenue;
                     category.totalQuantity += (item.quantity || 1);
                     
-                    // Store transaction
                     if (!category.transactions.has(sale.Id)) {
                         category.transactions.set(sale.Id, {
                             id: sale.Id,
@@ -1120,7 +1074,6 @@ const getSalesByCategory = async (req, res) => {
             }
         });
         
-        // Format response
         const formattedCategories = [];
         let totalRevenue = 0;
         let totalItems = 0;
@@ -1202,16 +1155,18 @@ const getSalesByCategory = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
+
+// ============================================
+// GENERATE INVOICE NUMBER (FIXED with moment-timezone)
+// ============================================
 const generateInvoiceNumber = async (pool, outletId) => {
     try {
-        // Get today's date in YYYYMMDD format (Singapore time)
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const todayPrefix = `${year}${month}${day}`;
+        // ✅ Get Singapore time using moment-timezone
+        const singaporeNow = moment().tz('Asia/Singapore');
+        const todayPrefix = singaporeNow.format('YYYYMMDD');
         
-        // Get the latest invoice number for today
+        console.log(`📅 Generating invoice for Singapore date: ${todayPrefix}`);
+        
         const result = await pool.request()
             .input('outletId', sql.Int, outletId)
             .input('datePrefix', sql.NVarChar, `${todayPrefix}%`)
@@ -1226,12 +1181,13 @@ const generateInvoiceNumber = async (pool, outletId) => {
         let nextNumber = 1;
         
         if (result.recordset.length > 0 && result.recordset[0].InvoiceNumber) {
-            // Extract the numeric part after '-'
-            const lastNumber = parseInt(result.recordset[0].InvoiceNumber.split('-')[1]);
-            nextNumber = lastNumber + 1;
+            const parts = result.recordset[0].InvoiceNumber.split('-');
+            if (parts.length === 2) {
+                const lastNumber = parseInt(parts[1]);
+                nextNumber = lastNumber + 1;
+            }
         }
         
-        // Format: YYYYMMDD-0001 (4 digits)
         const invoiceNumber = `${todayPrefix}-${String(nextNumber).padStart(4, '0')}`;
         
         console.log(`📄 Generated invoice number: ${invoiceNumber}`);
@@ -1239,25 +1195,19 @@ const generateInvoiceNumber = async (pool, outletId) => {
         
     } catch (error) {
         console.error('❌ Error generating invoice number:', error);
-        // Fallback: use timestamp
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const todayPrefix = `${year}${month}${day}`;
+        const singaporeNow = moment().tz('Asia/Singapore');
+        const todayPrefix = singaporeNow.format('YYYYMMDD');
         return `${todayPrefix}-${Date.now()}`;
     }
 };
 
-
 // ============================================
-// GET category items with DISCOUNT (UPDATED)
+// GET CATEGORY ITEMS - With Value Card (FIXED)
 // ============================================
 const getCategoryItems = async (req, res) => {
     try {
         const { category } = req.params;
-        const { filter, startDate, endDate, status } = req.query;
-        
+        const { filter, startDate, endDate, status, startTime, endTime } = req.query;
         const outletId = req.outletId;
         
         if (!outletId) {
@@ -1266,7 +1216,15 @@ const getCategoryItems = async (req, res) => {
         
         const pool = await getPool();
         
-        // ✅ Check if invoice column exists
+        // ✅ FIX: Use UTC time from database
+        const timeResult = await pool.request()
+            .query('SELECT GETUTCDATE() as utcNow, CAST(GETUTCDATE() AS DATE) as todayUTC');
+        const utcNow = timeResult.recordset[0].utcNow;
+        const todayUTC = timeResult.recordset[0].todayUTC;
+        
+        console.log('📅 UTC now (category items):', utcNow);
+        console.log('📅 Today UTC (category items):', todayUTC);
+        
         const checkInvoiceColumn = await pool.request().query(`
             SELECT COLUMN_NAME 
             FROM INFORMATION_SCHEMA.COLUMNS 
@@ -1276,7 +1234,6 @@ const getCategoryItems = async (req, res) => {
         
         const hasInvoiceColumn = checkInvoiceColumn.recordset.length > 0;
         
-        // ✅ Check if discount columns exist
         const checkColumns = await pool.request().query(`
             SELECT COLUMN_NAME 
             FROM INFORMATION_SCHEMA.COLUMNS 
@@ -1286,7 +1243,6 @@ const getCategoryItems = async (req, res) => {
         
         const hasDiscountColumns = checkColumns.recordset.length >= 3;
         
-        // ✅ Check if Status column exists
         const checkStatusColumn = await pool.request().query(`
             SELECT COLUMN_NAME 
             FROM INFORMATION_SCHEMA.COLUMNS 
@@ -1296,11 +1252,19 @@ const getCategoryItems = async (req, res) => {
         
         const hasStatusColumn = checkStatusColumn.recordset.length > 0;
         
+        const checkDayEndColumn = await pool.request().query(`
+            SELECT COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'Sales' 
+            AND COLUMN_NAME = 'DayEndId'
+        `);
+        
+        const hasDayEndColumn = checkDayEndColumn.recordset.length > 0;
+        
         let query = `
             SELECT Id, SaleDate, CAST(ItemsJson AS NVARCHAR(MAX)) as ItemsJson 
         `;
         
-        // ✅ ADD INVOICE NUMBER
         if (hasInvoiceColumn) {
             query += `, InvoiceNumber`;
         }
@@ -1313,7 +1277,10 @@ const getCategoryItems = async (req, res) => {
             query += `, Status`;
         }
         
-        // ✅✅✅ ADD VALUE CARD FIELDS ✅✅✅
+        if (hasDayEndColumn) {
+            query += `, DayEndId`;
+        }
+        
         query += `
             , JSON_VALUE(ItemsJson, '$.valueCardUsed.cardNumber') as ValueCardNumber
             , JSON_VALUE(ItemsJson, '$.valueCardUsed.memberName') as ValueCardMember
@@ -1328,7 +1295,10 @@ const getCategoryItems = async (req, res) => {
         const request = pool.request();
         request.input('outletId', sql.Int, outletId);
 
-        // Filter by status
+        // ✅ DayEnd Filter - always show ALL for category items
+        console.log('📊 Category Items: Showing ALL sales (ignoring DayEndId)');
+        // No DayEndId filter - shows all sales
+
         if (hasStatusColumn) {
             if (status === 'voided') {
                 query += ' AND Status = \'VOIDED\'';
@@ -1339,21 +1309,34 @@ const getCategoryItems = async (req, res) => {
             }
         }
 
-        // Date filters
+        // ✅ Date filters - use UTC!
         if (filter === 'today') {
-            query += ' AND CAST(SaleDate AS DATE) = CAST(GETDATE() AS DATE)';
-        } 
-        else if (filter === 'week') {
-            query += ' AND SaleDate >= DATEADD(day, -7, GETDATE())';
-        } 
-        else if (filter === 'month') {
-            query += ' AND SaleDate >= DATEADD(month, -1, GETDATE())';
-        } 
-        else if (filter === 'custom' && startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            start.setHours(0, 0, 0, 0);
-            end.setHours(23, 59, 59, 999);
+            query += " AND CAST(SaleDate AS DATE) = @todayDate";
+            request.input('todayDate', sql.Date, todayUTC);
+            
+        } else if (filter === 'week') {
+            const weekStart = new Date(utcNow);
+            weekStart.setDate(weekStart.getDate() - 7);
+            weekStart.setHours(0, 0, 0, 0);
+            
+            query += " AND SaleDate >= @weekStart";
+            request.input('weekStart', sql.DateTime, weekStart);
+            
+        } else if (filter === 'month') {
+            const monthStart = new Date(utcNow);
+            monthStart.setDate(monthStart.getDate() - 30);
+            monthStart.setHours(0, 0, 0, 0);
+            
+            query += " AND SaleDate >= @monthStart";
+            request.input('monthStart', sql.DateTime, monthStart);
+            
+        } else if (filter === 'custom' && startDate && endDate) {
+            // ✅ FIX: Use UTC directly!
+            const start = new Date(`${startDate}T${startTime || '00:00'}:00.000Z`);
+            const end = new Date(`${endDate}T${endTime || '23:59'}:59.999Z`);
+            
+            console.log('📅 Custom start (UTC):', start.toISOString());
+            console.log('📅 Custom end (UTC):', end.toISOString());
             
             query += ' AND SaleDate >= @startDate AND SaleDate <= @endDate';
             request.input('startDate', sql.DateTime, start);
@@ -1362,7 +1345,6 @@ const getCategoryItems = async (req, res) => {
 
         const result = await request.query(query);
         
-        // Process items
         const itemMap = new Map();
         const transactions = [];
         let totalDiscountForCategory = 0;
@@ -1380,7 +1362,6 @@ const getCategoryItems = async (req, res) => {
             }
             
             try {
-                // ✅ Parse ItemsJson - handle both formats
                 let parsedData = null;
                 try {
                     parsedData = JSON.parse(sale.ItemsJson || '{}');
@@ -1389,7 +1370,6 @@ const getCategoryItems = async (req, res) => {
                     return;
                 }
                 
-                // Extract items based on format
                 let itemsList = [];
                 if (parsedData.items && Array.isArray(parsedData.items)) {
                     itemsList = parsedData.items;
@@ -1441,7 +1421,6 @@ const getCategoryItems = async (req, res) => {
                             catItem.valueCardAmount += valueCardPerItem;
                         }
                         
-                        // ✅ Add transaction with INVOICE NUMBER, DISCOUNT, AND VALUE CARD
                         transactions.push({
                             saleId: sale.Id,
                             invoiceNumber: sale.InvoiceNumber || '',
@@ -1515,6 +1494,7 @@ const getCategoryItems = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
+
 module.exports = {
     createSale,
     getSales,
