@@ -35,7 +35,7 @@ const dayEndRoutes = require('./routes/dayEndRoutes');
 const staffRoutes = require('./routes/staffRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
-const uploadDir = path.join(__dirname, 'uploads');
+const uploadDir = process.env.UPLOADS_DIR || path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -191,7 +191,7 @@ app.get('/metrics', (req, res) => {
     });
 });
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(uploadDir));
 
 // Log all requests
 app.use((req, res, next) => {

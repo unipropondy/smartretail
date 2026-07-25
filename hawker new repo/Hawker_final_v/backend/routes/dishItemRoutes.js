@@ -87,9 +87,10 @@ const getEffectiveOutletId = async (req, res, next) => {
 // ============================================
 // MULTER CONFIGURATION (unchanged)
 // ============================================
+const uploadDir = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads');
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/');
+        cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
         cb(null, Date.now() + path.extname(file.originalname));
