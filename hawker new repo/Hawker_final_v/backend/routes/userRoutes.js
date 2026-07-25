@@ -5,9 +5,9 @@ const router = express.Router();
 const { getPool, sql } = require('../config/db');
 const { authenticateToken } = require('../middleware/auth');
 
-// ===========================================
+// ==========================================
 // HELPER FUNCTION - Get owner ID (for staff)
-// ===========================================
+// ==========================================
 const getOwnerId = async (userId) => {
   const pool = await getPool();
   const result = await pool.request()
