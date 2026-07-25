@@ -45,7 +45,8 @@ const createSale = async (req, res) => {
             discountValue,
             discountAmount,
             originalTotal,
-            valueCardUsed
+            valueCardUsed,
+            staffName
         } = req.body;
         
         const outletId = req.outletId;
@@ -55,6 +56,22 @@ const createSale = async (req, res) => {
         }
         
         const pool = await getPool();
+
+        // Dynamically ensure StaffName column exists in Sales table
+        try {
+            const checkCol = await pool.request().query(`
+                SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_NAME = 'Sales' AND COLUMN_NAME = 'StaffName'
+            `);
+            if (checkCol.recordset.length === 0) {
+                console.log('Adding StaffName column to Sales table...');
+                await pool.request().query("ALTER TABLE Sales ADD StaffName NVARCHAR(255) NULL");
+                console.log("Successfully added StaffName column to Sales table.");
+            }
+        } catch (colErr) {
+            console.log("Error checking/adding StaffName column:", colErr);
+        }
+
         const invoiceNumber = await generateInvoiceNumber(pool, outletId);
         
         const itemsWithCategory = items.map(item => ({
@@ -105,7 +122,8 @@ const createSale = async (req, res) => {
             .input('itemsJson', sql.NVarChar, itemsJson)
             .input('cashPaid', sql.Decimal(10,2), cashPaid || null)
             .input('changeAmount', sql.Decimal(10,2), change || null)
-            .input('outletId', sql.Int, outletId);
+            .input('outletId', sql.Int, outletId)
+            .input('staffName', sql.NVarChar, staffName || null);
         
         if (hasInvoiceColumn) {
             request = request.input('invoiceNumber', sql.NVarChar, invoiceNumber);
@@ -123,17 +141,17 @@ const createSale = async (req, res) => {
                         Total, PaymentMethod, ItemsJson, 
                         CashPaid, ChangeAmount, OutletId,
                         DiscountType, DiscountValue, DiscountAmount,
-                        InvoiceNumber, Status
+                        InvoiceNumber, Status, StaffName
                     )
                     OUTPUT INSERTED.Id, INSERTED.Total, INSERTED.PaymentMethod, 
                            INSERTED.SaleDate, INSERTED.DiscountType, 
                            INSERTED.DiscountValue, INSERTED.DiscountAmount,
-                           INSERTED.InvoiceNumber
+                           INSERTED.InvoiceNumber, INSERTED.StaffName
                     VALUES (
                         @total, @paymentMethod, @itemsJson,
                         @cashPaid, @changeAmount, @outletId,
                         @discountType, @discountValue, @discountAmount,
-                        @invoiceNumber, 'COMPLETED'
+                        @invoiceNumber, 'COMPLETED', @staffName
                     )
                 `;
             } else {
@@ -142,16 +160,17 @@ const createSale = async (req, res) => {
                         Total, PaymentMethod, ItemsJson, 
                         CashPaid, ChangeAmount, OutletId,
                         DiscountType, DiscountValue, DiscountAmount,
-                        Status
+                        Status, StaffName
                     )
                     OUTPUT INSERTED.Id, INSERTED.Total, INSERTED.PaymentMethod, 
                            INSERTED.SaleDate, INSERTED.DiscountType, 
-                           INSERTED.DiscountValue, INSERTED.DiscountAmount
+                           INSERTED.DiscountValue, INSERTED.DiscountAmount,
+                           INSERTED.StaffName
                     VALUES (
                         @total, @paymentMethod, @itemsJson,
                         @cashPaid, @changeAmount, @outletId,
                         @discountType, @discountValue, @discountAmount,
-                        'COMPLETED'
+                        'COMPLETED', @staffName
                     )
                 `;
             }
@@ -161,14 +180,14 @@ const createSale = async (req, res) => {
                     INSERT INTO Sales (
                         Total, PaymentMethod, ItemsJson, 
                         CashPaid, ChangeAmount, OutletId,
-                        InvoiceNumber, Status
+                        InvoiceNumber, Status, StaffName
                     )
                     OUTPUT INSERTED.Id, INSERTED.Total, INSERTED.PaymentMethod, 
-                           INSERTED.SaleDate, INSERTED.InvoiceNumber
+                           INSERTED.SaleDate, INSERTED.InvoiceNumber, INSERTED.StaffName
                     VALUES (
                         @total, @paymentMethod, @itemsJson,
                         @cashPaid, @changeAmount, @outletId,
-                        @invoiceNumber, 'COMPLETED'
+                        @invoiceNumber, 'COMPLETED', @staffName
                     )
                 `;
             } else {
@@ -176,13 +195,14 @@ const createSale = async (req, res) => {
                     INSERT INTO Sales (
                         Total, PaymentMethod, ItemsJson, 
                         CashPaid, ChangeAmount, OutletId,
-                        Status
+                        Status, StaffName
                     )
-                    OUTPUT INSERTED.Id, INSERTED.Total, INSERTED.PaymentMethod, INSERTED.SaleDate
+                    OUTPUT INSERTED.Id, INSERTED.Total, INSERTED.PaymentMethod, 
+                           INSERTED.SaleDate, INSERTED.StaffName
                     VALUES (
                         @total, @paymentMethod, @itemsJson,
                         @cashPaid, @changeAmount, @outletId,
-                        'COMPLETED'
+                        'COMPLETED', @staffName
                     )
                 `;
             }
@@ -195,7 +215,8 @@ const createSale = async (req, res) => {
             total: result.recordset[0].Total,
             paymentMethod: result.recordset[0].PaymentMethod,
             date: result.recordset[0].SaleDate,
-            items: itemsWithCategory
+            items: itemsWithCategory,
+            staffName: result.recordset[0].StaffName || ''
         };
         
         if (hasInvoiceColumn && result.recordset[0].InvoiceNumber) {
@@ -457,7 +478,7 @@ const getSales = async (req, res) => {
                    InvoiceNumber,
                    DiscountType, DiscountValue, DiscountAmount,
                    Status, VoidedBy, VoidedAt, VoidReason,
-                   DayEndId
+                   DayEndId, StaffName
             FROM Sales WITH (NOLOCK) 
             WHERE OutletId = @outletId
         `;
@@ -561,7 +582,8 @@ const getSales = async (req, res) => {
                 voidedAt: sale.VoidedAt,
                 voidedBy: sale.VoidedBy,
                 valueCard: valueCardInfo,
-                dayEndId: sale.DayEndId
+                dayEndId: sale.DayEndId,
+                staffName: sale.StaffName || ''
             };
         });
         

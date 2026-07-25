@@ -333,6 +333,10 @@ private static async printThermalReceipt(
     text += `Bill No: ${saleData.billNumber || saleData.id || Date.now()}\n`;
     text += `Date: ${new Date().toLocaleString()}\n`;
     text += `GST Reg: ${gstInfo.regNo}\n`;
+    text += `Cashier: ${saleData.cashier || company.cashierName || 'Staff'}\n`;
+    if (saleData.staffName) {
+      text += `Staff: ${saleData.staffName}\n`;
+    }
     text += '-'.repeat(32) + '\n';
     
     saleData.items?.forEach((item: any) => {
@@ -514,6 +518,77 @@ static async printSalesReportThermal(reportData: any, userId?: string | number, 
             }
         }
         
+        // ========== STAFF BREAKDOWN ==========
+        const staffMap: Record<string, any> = {};
+        if (reportData.salesHistory && Array.isArray(reportData.salesHistory)) {
+            reportData.salesHistory.forEach((sale: any) => {
+                if (sale.status === 'VOIDED') return;
+                const name = sale.staffName || 'Unassigned / Cashier';
+                if (!staffMap[name]) {
+                    staffMap[name] = {
+                        revenue: 0,
+                        count: 0,
+                        payments: {},
+                        categories: {},
+                        items: {}
+                    };
+                }
+                const entry = staffMap[name];
+                entry.revenue += Number(sale.total) || 0;
+                entry.count += 1;
+
+                const method = sale.paymentMethod || 'Unknown';
+                entry.payments[method] = (entry.payments[method] || 0) + (Number(sale.total) || 0);
+
+                if (sale.items && Array.isArray(sale.items)) {
+                    sale.items.forEach((item: any) => {
+                        const itemName = item.name || 'Unknown Item';
+                        const itemCat = item.category || item.displayCategory || 'Uncategorized';
+                        const qty = Number(item.quantity) || 0;
+                        const itemVal = (Number(item.price) || 0) * qty;
+
+                        entry.categories[itemCat] = (entry.categories[itemCat] || 0) + itemVal;
+                        if (!entry.items[itemName]) {
+                            entry.items[itemName] = 0;
+                        }
+                        entry.items[itemName] += qty;
+                    });
+                }
+            });
+        }
+
+        const staffList = Object.entries(staffMap);
+        if (staffList.length > 0) {
+            text += '\n' + '='.repeat(32) + '\n';
+            text += this.centerText('STAFF BREAKDOWN', 32) + '\n';
+            text += '='.repeat(32) + '\n';
+
+            for (const [staffName, data] of staffList) {
+                text += `👤 ${staffName}\n`;
+                text += this.twoColumns('  Revenue:', `${symbol}${data.revenue.toFixed(2)}`, 32) + '\n';
+                text += this.twoColumns('  Sales Count:', `${data.count}`, 32) + '\n';
+
+                // Payments
+                text += '  - Payments:\n';
+                for (const [method, amount] of Object.entries(data.payments)) {
+                    text += this.twoColumns(`    ${method}:`, `${symbol}${(amount as number).toFixed(2)}`, 32) + '\n';
+                }
+
+                // Categories
+                text += '  - Categories:\n';
+                for (const [catName, amount] of Object.entries(data.categories)) {
+                    text += this.twoColumns(`    ${catName}:`, `${symbol}${(amount as number).toFixed(2)}`, 32) + '\n';
+                }
+
+                // Items
+                text += '  - Items:\n';
+                for (const [itemName, qty] of Object.entries(data.items)) {
+                    text += this.twoColumns(`    ${itemName}:`, `${qty}x`, 32) + '\n';
+                }
+                text += '-'.repeat(32) + '\n';
+            }
+        }
+        
         text += '\n' + '='.repeat(32) + '\n';
         text += this.centerText('END OF REPORT', 32) + '\n';
         text += '='.repeat(32) + '\n\n';
@@ -688,6 +763,119 @@ static async printCategoryReportThermal(
         return false;
     }
 }
+  // ==================== SETTLEMENT REPORT THERMAL PRINT ====================
+  static async printSettlementReportThermal(
+      summary: any,
+      cashFlow: any,
+      paymodeBreakdown: any,
+      staffBreakdown: any[],
+      cashierName: string,
+      outletName: string,
+      dateStr: string,
+      userId?: string | number
+  ): Promise<boolean> {
+      try {
+          const sunmiReady = await SunmiPrinterService.init();
+          if (!sunmiReady) {
+              return false;
+          }
+
+          const company = await BillPDFGenerator.loadSettings(userId);
+          const symbol = company.currencySymbol || '$';
+
+          let text = '\n';
+          text += '='.repeat(32) + '\n';
+          text += this.centerText(company.name || outletName || 'SETTLEMENT REPORT', 32) + '\n';
+          text += '='.repeat(32) + '\n';
+          text += `Date: ${dateStr}\n`;
+          text += `Cashier: ${cashierName}\n`;
+          text += `Printed: ${new Date().toLocaleString()}\n`;
+          text += '-'.repeat(32) + '\n\n';
+
+          // ========== SALES SUMMARY ==========
+          text += this.centerText('SALES SUMMARY', 32) + '\n';
+          text += '-'.repeat(32) + '\n';
+          text += this.twoColumns('Total Sales:', `${symbol}${(summary.totalSales || 0).toFixed(2)}`, 32) + '\n';
+          text += this.twoColumns('Discount:', `-${symbol}${(summary.totalDiscount || 0).toFixed(2)}`, 32) + '\n';
+          text += this.twoColumns('Void Amount:', `-${symbol}${(summary.voidAmount || 0).toFixed(2)}`, 32) + '\n';
+          text += this.twoColumns('Net Sales:', `${symbol}${(summary.netSales || 0).toFixed(2)}`, 32) + '\n';
+          text += '-'.repeat(32) + '\n\n';
+
+          // ========== PAYMENT BREAKDOWN ==========
+          text += this.centerText('PAYMENT BREAKDOWN', 32) + '\n';
+          text += '-'.repeat(32) + '\n';
+          if (paymodeBreakdown.cash > 0) text += this.twoColumns('💵 Cash:', `${symbol}${paymodeBreakdown.cash.toFixed(2)}`, 32) + '\n';
+          if (paymodeBreakdown.paynow > 0) text += this.twoColumns('📱 PayNow:', `${symbol}${paymodeBreakdown.paynow.toFixed(2)}`, 32) + '\n';
+          if (paymodeBreakdown.upi > 0) text += this.twoColumns('📱 UPI:', `${symbol}${paymodeBreakdown.upi.toFixed(2)}`, 32) + '\n';
+          if (paymodeBreakdown.card > 0) text += this.twoColumns('💳 Card:', `${symbol}${paymodeBreakdown.card.toFixed(2)}`, 32) + '\n';
+          if (paymodeBreakdown.valuecard > 0) text += this.twoColumns('💎 Value Card:', `${symbol}${paymodeBreakdown.valuecard.toFixed(2)}`, 32) + '\n';
+          if (paymodeBreakdown.cdc > 0) text += this.twoColumns('🎫 CDC Voucher:', `${symbol}${paymodeBreakdown.cdc.toFixed(2)}`, 32) + '\n';
+          if (paymodeBreakdown.other > 0) text += this.twoColumns('💵 Other:', `${symbol}${paymodeBreakdown.other.toFixed(2)}`, 32) + '\n';
+          text += '-'.repeat(32) + '\n\n';
+
+          // ========== CASH FLOW ==========
+          text += this.centerText('CASH FLOW', 32) + '\n';
+          text += '-'.repeat(32) + '\n';
+          text += this.twoColumns('Opening Cash:', `${symbol}${cashFlow.openingCash.toFixed(2)}`, 32) + '\n';
+          text += this.twoColumns('Cash Received:', `+${symbol}${cashFlow.cashReceived.toFixed(2)}`, 32) + '\n';
+          text += this.twoColumns('Cash Out Total:', `-${symbol}${cashFlow.manualCashOutTotal.toFixed(2)}`, 32) + '\n';
+          text += this.twoColumns('Expected Closing:', `${symbol}${cashFlow.expectedClosing.toFixed(2)}`, 32) + '\n';
+          text += this.twoColumns('Physical Cash:', `${symbol}${cashFlow.physicalCash.toFixed(2)}`, 32) + '\n';
+          
+          const varianceSign = cashFlow.variance >= 0 ? '+' : '-';
+          text += this.twoColumns('Variance:', `${varianceSign}${symbol}${Math.abs(cashFlow.variance).toFixed(2)}`, 32) + '\n';
+          text += '-'.repeat(32) + '\n\n';
+
+          // ========== STAFF BREAKDOWN ==========
+          if (staffBreakdown && staffBreakdown.length > 0) {
+              text += this.centerText('STAFF SALES BREAKDOWN', 32) + '\n';
+              text += '='.repeat(32) + '\n';
+              for (const staff of staffBreakdown) {
+                  text += `👤 ${staff.name}\n`;
+                  text += this.twoColumns('  Total Sales:', `${symbol}${staff.totalSales.toFixed(2)}`, 32) + '\n';
+                  
+                  // Payments
+                  const payList = [];
+                  if (staff.cash > 0) payList.push(`Cash: ${symbol}${staff.cash.toFixed(2)}`);
+                  if (staff.paynow > 0) payList.push(`PayNow: ${symbol}${staff.paynow.toFixed(2)}`);
+                  if (staff.upi > 0) payList.push(`UPI: ${symbol}${staff.upi.toFixed(2)}`);
+                  if (staff.card > 0) payList.push(`Card: ${symbol}${staff.card.toFixed(2)}`);
+                  if (staff.valuecard > 0) payList.push(`Value Card: ${symbol}${staff.valuecard.toFixed(2)}`);
+                  
+                  if (payList.length > 0) {
+                      text += `  - Payments: ${payList.join(', ')}\n`;
+                  }
+
+                  // Categories
+                  if (staff.categories && Object.keys(staff.categories).length > 0) {
+                      const catList = Object.entries(staff.categories).map(([catName, val]) => `${catName}: ${symbol}${(val as number).toFixed(2)}`);
+                      text += `  - Categories: ${catList.join(', ')}\n`;
+                  }
+
+                  // Items
+                  if (staff.items && Object.keys(staff.items).length > 0) {
+                      const itemList = Object.entries(staff.items).map(([itemName, data]: any) => `${itemName} (${data.qty}x)`);
+                      text += `  - Items: ${itemList.join(', ')}\n`;
+                  }
+                  text += '-'.repeat(32) + '\n';
+              }
+          }
+
+          text += '\n' + '='.repeat(32) + '\n';
+          text += this.centerText('END OF SETTLEMENT', 32) + '\n';
+          text += '='.repeat(32) + '\n\n';
+          text += this.centerText('SMARTRETAIL BY UNIPROSG', 32) + '\n';
+          text += '\n\n';
+
+          await SunmiPrinterService.printRawText(text);
+          await SunmiPrinterService.cutPaper();
+          return true;
+      } catch (e) {
+          console.log('Error printing settlement report thermal:', e);
+          return false;
+      }
+  }
+
   // ==================== HELPER METHODS ====================
   private static centerText(text: string, width: number): string {
     if (!text) return ' '.repeat(width);

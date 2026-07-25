@@ -514,6 +514,13 @@ private static escapeHtml(str: string): string {
               <span class="detail-value">${company.cashierName}</span>
             </div>
             ` : ''}
+            
+            ${saleData.staffName ? `
+            <div class="detail-row">
+              <span class="detail-label">STAFF:</span>
+              <span class="detail-value">${this.escapeHtml(saleData.staffName)}</span>
+            </div>
+            ` : ''}
           </div>
           
           <!-- Items Table -->

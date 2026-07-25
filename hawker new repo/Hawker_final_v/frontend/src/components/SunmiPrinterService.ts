@@ -1,15 +1,34 @@
 // components/SunmiPrinterService.ts - With Date Format + QTY Alignment Fix ✅
 
-import { 
-  initPrinter, 
-  printText, 
-  printTextWithSize,
-  printImageBase64,
-  printQRCode,
-  lineWrap, 
-  cutPaper
-} from 'sunmi-printer-expo';
 import { Platform } from 'react-native';
+
+// Fallback no-op functions for non-Sunmi/development environments
+let initPrinter: any = () => Promise.resolve(false);
+let printText: any = (text: string) => Promise.resolve();
+let printTextWithSize: any = (text: string, size: number) => Promise.resolve();
+let printImageBase64: any = (base64: string) => Promise.resolve();
+let printQRCode: any = (data: string) => Promise.resolve();
+let lineWrap: any = (lines: number) => Promise.resolve();
+let cutPaper: any = () => Promise.resolve();
+
+try {
+  // Only attempt to load the native module on Android
+  if (Platform.OS === 'android') {
+    const expoModule = require('sunmi-printer-expo');
+    if (expoModule) {
+      if (expoModule.initPrinter) initPrinter = expoModule.initPrinter;
+      if (expoModule.printText) printText = expoModule.printText;
+      if (expoModule.printTextWithSize) printTextWithSize = expoModule.printTextWithSize;
+      if (expoModule.printImageBase64) printImageBase64 = expoModule.printImageBase64;
+      if (expoModule.printQRCode) printQRCode = expoModule.printQRCode;
+      if (expoModule.lineWrap) lineWrap = expoModule.lineWrap;
+      if (expoModule.cutPaper) cutPaper = expoModule.cutPaper;
+      console.log('SunmiPrinter: Native module loaded successfully.');
+    }
+  }
+} catch (e) {
+  console.log('SunmiPrinter: Native module not available, using fallback no-ops:', e);
+}
 
 class SunmiPrinterService {
   
@@ -224,6 +243,9 @@ static async cutPaper(): Promise<boolean> {
       await this.left(`INVOICE NO: ${saleData.invoiceNumber || saleData.id}`);
       await this.left(`DATE: ${dateStr}`);  // ✅ DD/MM/YYYY
       await this.left(`CASHIER: ${saleData.cashier || companySettings.cashierName || 'Staff'}`);
+      if (saleData.staffName) {
+        await this.left(`STAFF: ${saleData.staffName}`);
+      }
       await this.divider('-');
       
       // ============ ITEMS SECTION ============

@@ -128,6 +128,7 @@ const POSSalesReport: React.FC<Props> = ({
   });
   
   const [salesHistory, setSalesHistory] = useState<any[]>([]);
+  const [expandedStaff, setExpandedStaff] = useState<string | null>(null);
   
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -362,7 +363,8 @@ const POSSalesReport: React.FC<Props> = ({
           voidedBy: sale.voidedBy,
           discount: sale.discount || null,
           valueCard: sale.valueCard || null,
-          dayEndId: sale.dayEndId || sale.DayEndId || null
+          dayEndId: sale.dayEndId || sale.DayEndId || null,
+          staffName: sale.staffName || sale.StaffName || ''
         }));
         
         if (showVoidedTab) {
@@ -926,7 +928,7 @@ const POSSalesReport: React.FC<Props> = ({
         startTimeChanged, endTimeChanged, voidedTabChanged 
       });
       
-      if (activeTab === 'overview') {
+      if (activeTab === 'overview' || activeTab === 'staff') {
         loadOverviewData();
       } else {
         loadCategoryData();
@@ -942,6 +944,237 @@ const POSSalesReport: React.FC<Props> = ({
       prevShowVoidedCategoriesTabRef.current = showVoidedCategoriesTab;
     }
   }, [visible, selectedFilter, startDate, endDate, startTime, endTime, activeTab, showVoidedTab, showVoidedCategoriesTab]);
+
+  // ============ STAFF SALES RENDER ============
+  const renderStaffSales = () => {
+    const staffSummaryList: any[] = [];
+    const staffMap: Record<string, any> = {};
+
+    salesHistory.forEach((sale) => {
+      if (sale.status === 'VOIDED') return;
+      const name = sale.staffName || 'Unassigned / Cashier';
+      
+      if (!staffMap[name]) {
+        staffMap[name] = {
+          name: name,
+          revenue: 0,
+          txCount: 0,
+          payments: {},
+          items: {},
+          categories: {}
+        };
+        staffSummaryList.push(staffMap[name]);
+      }
+
+      const entry = staffMap[name];
+      entry.revenue += Number(sale.total) || 0;
+      entry.txCount += 1;
+
+      const method = sale.paymentMethod || 'Unknown';
+      entry.payments[method] = (entry.payments[method] || 0) + (Number(sale.total) || 0);
+
+      if (sale.items && Array.isArray(sale.items)) {
+        sale.items.forEach((item: any) => {
+          const itemName = item.name || 'Unknown Item';
+          const itemCat = item.category || item.displayCategory || 'Uncategorized';
+          const qty = Number(item.quantity) || 0;
+          const total = (Number(item.price) || 0) * qty;
+
+          if (!entry.items[itemName]) {
+            entry.items[itemName] = { qty: 0, revenue: 0, category: itemCat };
+          }
+          entry.items[itemName].qty += qty;
+          entry.items[itemName].revenue += total;
+
+          entry.categories[itemCat] = (entry.categories[itemCat] || 0) + total;
+        });
+      }
+    });
+
+    if (staffSummaryList.length === 0) {
+      return (
+        <View style={{ padding: 24, alignItems: 'center' }}>
+          <Ionicons name="people-outline" size={48} color={theme.textSecondary} />
+          <Text style={{ color: theme.textSecondary, marginTop: 12, fontSize: 16 }}>
+            No staff sales transactions recorded for this period.
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={{ gap: 16, marginBottom: 24, paddingHorizontal: 12 }}>
+        <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text, marginBottom: 8 }}>
+          👤 Sales Summary by Staff Member
+        </Text>
+        
+        {staffSummaryList.map((staff, idx) => {
+          const isExpanded = expandedStaff === staff.name;
+          
+          return (
+            <View 
+              key={`staff-sum-${idx}`}
+              style={{
+                backgroundColor: theme.card,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: theme.border,
+                overflow: 'hidden',
+                marginBottom: 12
+              }}
+            >
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setExpandedStaff(isExpanded ? null : staff.name)}
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: 16,
+                  backgroundColor: theme.surface
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View 
+                    style={{ 
+                      width: 40, 
+                      height: 40, 
+                      borderRadius: 20, 
+                      backgroundColor: theme.primary + '20',
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <Text style={{ color: theme.primary, fontWeight: 'bold', fontSize: 16 }}>
+                      {staff.name.substring(0, 2).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: theme.text }}>
+                      {staff.name}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: theme.textSecondary }}>
+                      {staff.txCount} {staff.txCount === 1 ? 'sale' : 'sales'}
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={{ fontSize: 10, color: theme.textSecondary, textTransform: 'uppercase' }}>
+                      Revenue
+                    </Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: theme.success }}>
+                      {formatPrice(staff.revenue)}
+                    </Text>
+                  </View>
+                  <Ionicons 
+                    name={isExpanded ? "chevron-up" : "chevron-down"} 
+                    size={20} 
+                    color={theme.textSecondary} 
+                  />
+                </View>
+              </TouchableOpacity>
+
+              {isExpanded && (
+                <View style={{ padding: 16, borderTopWidth: 1, borderColor: theme.border, gap: 16 }}>
+                  
+                  <View>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: theme.textSecondary, marginBottom: 8, textTransform: 'uppercase' }}>
+                      💳 Payments Breakdown
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {Object.entries(staff.payments).map(([method, amount]: any) => (
+                        <View 
+                          key={method} 
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 8,
+                            backgroundColor: theme.background,
+                            borderWidth: 1,
+                            borderColor: theme.border,
+                            minWidth: 100
+                          }}
+                        >
+                          <Text style={{ fontSize: 10, color: theme.textSecondary }}>{method}</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>
+                            {formatPrice(amount)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: theme.textSecondary, marginBottom: 8, textTransform: 'uppercase' }}>
+                      🏷️ Category Sales
+                    </Text>
+                    <View style={{ gap: 6 }}>
+                      {Object.entries(staff.categories).map(([catName, amount]: any) => (
+                        <View 
+                          key={catName}
+                          style={{ 
+                            flexDirection: 'row', 
+                            justifyContent: 'space-between',
+                            paddingVertical: 4,
+                            borderBottomWidth: 0.5,
+                            borderColor: theme.border
+                          }}
+                        >
+                          <Text style={{ fontSize: 13, color: theme.text }}>{catName}</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '500', color: theme.text }}>
+                            {formatPrice(amount)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: theme.textSecondary, marginBottom: 8, textTransform: 'uppercase' }}>
+                      📦 Sold Items
+                    </Text>
+                    <View style={{ gap: 8 }}>
+                      {Object.entries(staff.items).map(([itemName, data]: any) => (
+                        <View 
+                          key={itemName}
+                          style={{ 
+                            flexDirection: 'row', 
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            paddingVertical: 4
+                          }}
+                        >
+                          <View>
+                            <Text style={{ fontSize: 13, fontWeight: '500', color: theme.text }}>
+                              {itemName}
+                            </Text>
+                            <Text style={{ fontSize: 10, color: theme.textSecondary }}>
+                              Category: {data.category}
+                            </Text>
+                          </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: 13, color: theme.text }}>
+                              {data.qty}x
+                            </Text>
+                            <Text style={{ fontSize: 11, color: theme.textSecondary }}>
+                              {formatPrice(data.revenue)}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
 
   // ============ RENDER ============
   return (
@@ -1018,6 +1251,14 @@ const POSSalesReport: React.FC<Props> = ({
             >
               <Text style={[styles.tabText, { color: activeTab === 'categories' ? theme.primary : theme.textSecondary }]}>
                 🏷️ Categories
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'staff' && styles.activeTab, activeTab === 'staff' && { borderBottomColor: theme.primary }]}
+              onPress={() => setActiveTab('staff')}
+            >
+              <Text style={[styles.tabText, { color: activeTab === 'staff' ? theme.primary : theme.textSecondary }]}>
+                👤 Staff Sales
               </Text>
             </TouchableOpacity>
           </View>
@@ -1328,6 +1569,11 @@ const POSSalesReport: React.FC<Props> = ({
                               <Text style={[styles.saleTime, { color: theme.textSecondary }]}>
                                 {formatDateTime(sale.date).time}  
                               </Text>
+                              {sale.staffName ? (
+                                <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2, fontWeight: '500' }}>
+                                  👤 Staff: {sale.staffName}
+                                </Text>
+                              ) : null}
                             </View>
                             
                             {showVoidedTab ? (
@@ -1453,7 +1699,7 @@ const POSSalesReport: React.FC<Props> = ({
                       </View>
                     )}
                   </>
-                ) : (
+                ) : activeTab === 'categories' ? (
                   /* ===== CATEGORIES TAB ===== */
                   <>
                     <View style={styles.summaryContainer}>
@@ -1788,6 +2034,11 @@ const POSSalesReport: React.FC<Props> = ({
                       </View>
                     ) : null}
                   </>
+                ) : (
+                  /* ===== STAFF SALES TAB ===== */
+                  <>
+                    {renderStaffSales()}
+                  </>
                 )}
               </>
             )}
@@ -1861,6 +2112,14 @@ const POSSalesReport: React.FC<Props> = ({
                         {new Date(selectedSale.date).toLocaleString()}
                       </Text>
                     </View>
+                    {selectedSale.staffName ? (
+                      <View style={styles.voidInfoRow}>
+                        <Text style={[styles.voidInfoLabel, { color: theme.textSecondary }]}>Staff:</Text>
+                        <Text style={[styles.voidInfoValue, { color: theme.text, fontWeight: '600' }]}>
+                          {selectedSale.staffName}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                   
                   <View style={[styles.voidItemsCard, { backgroundColor: theme.surface }]}>

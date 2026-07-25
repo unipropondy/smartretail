@@ -11,6 +11,7 @@ import * as Sharing from 'expo-sharing';
 import API from '../api';
 import * as FileSystem from 'expo-file-system/legacy';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import UniversalPrinter from './UniversalPrinter';
 
 interface SettlementReportProps {
   visible: boolean;
@@ -84,6 +85,7 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
     0.50: 0, 0.20: 0, 0.10: 0, 0.05: 0
   });
   const [physicalCashSaved, setPhysicalCashSaved] = useState(false);
+  const [salesList, setSalesList] = useState<any[]>([]);
   
   // Settlement Data
   const [summary, setSummary] = useState({
@@ -232,6 +234,7 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
         });
         
         console.log('📊 Calculated totals:', { totalSales, totalDiscount, cashReceived });
+        setSalesList(sales);
         
         setSummary({
           totalSales: totalSales,
@@ -477,6 +480,23 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
       });
       
       setIsSettled(true);
+      
+      // Auto print settlement report on thermal printer
+      try {
+        const staffData = getStaffBreakdown(salesList);
+        await UniversalPrinter.printSettlementReportThermal(
+          summary,
+          cashFlow,
+          paymodeBreakdown,
+          staffData,
+          cashierName,
+          outletName,
+          dateStr
+        );
+      } catch (printErr) {
+        console.log('Error auto printing settlement report:', printErr);
+      }
+
       Alert.alert('✅ Success', 'Day settled successfully!');
       onClose();
     }, 'Finalizing settlement...');
@@ -578,6 +598,77 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
     );
   };
 
+  const getStaffBreakdown = (sales: any[]) => {
+    const staffMap: Record<string, {
+      name: string;
+      totalSales: number;
+      cash: number;
+      card: number;
+      upi: number;
+      paynow: number;
+      valuecard: number;
+      other: number;
+      categories: Record<string, number>;
+      items: Record<string, { qty: number; revenue: number; category: string }>;
+    }> = {};
+
+    sales.forEach((sale: any) => {
+      const name = sale.staffName || 'Unassigned / Cashier';
+      if (!staffMap[name]) {
+        staffMap[name] = {
+          name: name,
+          totalSales: 0,
+          cash: 0,
+          card: 0,
+          upi: 0,
+          paynow: 0,
+          valuecard: 0,
+          other: 0,
+          categories: {},
+          items: {}
+        };
+      }
+      
+      const entry = staffMap[name];
+      const finalAmount = Number(sale.total) || 0;
+      entry.totalSales += finalAmount;
+
+      const method = (sale.paymentMethod || 'Unknown').toLowerCase();
+      if (method.includes('cash')) {
+        entry.cash += finalAmount;
+      } else if (method.includes('upi')) {
+        entry.upi += finalAmount;
+      } else if (method.includes('card')) {
+        entry.card += finalAmount;
+      } else if (method.includes('paynow')) {
+        entry.paynow += finalAmount;
+      } else if (method.includes('value')) {
+        entry.valuecard += finalAmount;
+      } else {
+        entry.other += finalAmount;
+      }
+
+      if (sale.items && Array.isArray(sale.items)) {
+        sale.items.forEach((item: any) => {
+          const itemName = item.name || 'Unknown Item';
+          const itemCat = item.category || item.displayCategory || 'Uncategorized';
+          const qty = Number(item.quantity) || 0;
+          const totalVal = (Number(item.price) || 0) * qty;
+
+          entry.categories[itemCat] = (entry.categories[itemCat] || 0) + totalVal;
+
+          if (!entry.items[itemName]) {
+            entry.items[itemName] = { qty: 0, revenue: 0, category: itemCat };
+          }
+          entry.items[itemName].qty += qty;
+          entry.items[itemName].revenue += totalVal;
+        });
+      }
+    });
+
+    return Object.values(staffMap);
+  };
+
   // ============ REPORT ACTIONS ============
   const generateHTML = (): string => {
     const symbol = '$';
@@ -661,6 +752,18 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
                     <tr style="font-weight:bold"><th>Net Sales</th><td class="amount">${formatPrice(summary.netSales)}</td></tr>
                 </table>
                 
+                <div class="section-title">💳 PAYMENT BREAKDOWN</div>
+                <table>
+                    <tr><th>Payment Method</th><th class="amount">Amount</th></tr>
+                    ${paymodeBreakdown.cash > 0 ? `<tr><td>💵 Cash</td><td class="amount">${formatPrice(paymodeBreakdown.cash)}</td></tr>` : ''}
+                    ${paymodeBreakdown.paynow > 0 ? `<tr><td>📱 PayNow</td><td class="amount">${formatPrice(paymodeBreakdown.paynow)}</td></tr>` : ''}
+                    ${paymodeBreakdown.upi > 0 ? `<tr><td>📱 UPI</td><td class="amount">${formatPrice(paymodeBreakdown.upi)}</td></tr>` : ''}
+                    ${paymodeBreakdown.card > 0 ? `<tr><td>💳 Card</td><td class="amount">${formatPrice(paymodeBreakdown.card)}</td></tr>` : ''}
+                    ${paymodeBreakdown.valuecard > 0 ? `<tr><td>💎 Value Card</td><td class="amount">${formatPrice(paymodeBreakdown.valuecard)}</td></tr>` : ''}
+                    ${paymodeBreakdown.cdc > 0 ? `<tr><td>🎫 CDC Voucher</td><td class="amount">${formatPrice(paymodeBreakdown.cdc)}</td></tr>` : ''}
+                    ${paymodeBreakdown.other > 0 ? `<tr><td>💵 Other</td><td class="amount">${formatPrice(paymodeBreakdown.other)}</td></tr>` : ''}
+                </table>
+                
                 <div class="section-title">💰 CASH FLOW</div>
                 <table>
                     <tr><th>Description</th><th class="amount">Amount</th></tr>
@@ -672,6 +775,41 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
                     <tr style="font-weight:bold;${cashFlow.variance === 0 ? 'color:green' : cashFlow.variance > 0 ? 'color:orange' : 'color:red'}">
                         <td>Variance</td><td class="amount">${cashFlow.variance >= 0 ? '+' : ''}${formatPrice(Math.abs(cashFlow.variance))}</td>
                     </tr>
+                </table>
+
+                <div class="section-title">👤 STAFF SALES BREAKDOWN</div>
+                <table>
+                    <thead>
+                        <tr style="font-weight:bold; background:#fafafa;">
+                            <th>Staff Name</th>
+                            <th>Cash</th>
+                            <th>PayNow</th>
+                            <th>UPI</th>
+                            <th>Card</th>
+                            <th>Value Card</th>
+                            <th class="amount">Total Sales</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${getStaffBreakdown(salesList).map(staff => `
+                            <tr>
+                                <td>${staff.name}</td>
+                                <td>${staff.cash > 0 ? formatPrice(staff.cash) : '-'}</td>
+                                <td>${staff.paynow > 0 ? formatPrice(staff.paynow) : '-'}</td>
+                                <td>${staff.upi > 0 ? formatPrice(staff.upi) : '-'}</td>
+                                <td>${staff.card > 0 ? formatPrice(staff.card) : '-'}</td>
+                                <td>${staff.valuecard > 0 ? formatPrice(staff.valuecard) : '-'}</td>
+                                <td class="amount" style="font-weight:bold">${formatPrice(staff.totalSales)}</td>
+                            </tr>
+                            <tr>
+                                <td colspan="7" style="padding-left: 20px; background: #fafafa; font-size: 11px; color: #666; border-bottom: 2px solid #ddd;">
+                                    <strong>Categories:</strong> ${Object.keys(staff.categories).length > 0 ? Object.entries(staff.categories).map(([cat, val]) => `${cat}: ${formatPrice(val)}`).join(' | ') : 'None'}<br/>
+                                    <strong>Items:</strong> ${Object.keys(staff.items).length > 0 ? Object.entries(staff.items).map(([item, data]: any) => `${item} (${data.qty}x - ${formatPrice(data.revenue)})`).join(', ') : 'None'}
+                                </td>
+                            </tr>
+                        `).join('')}
+                        ${salesList.length === 0 ? '<tr><td colspan="7" style="text-align:center">No sales recorded</td></tr>' : ''}
+                    </tbody>
                 </table>
             </div>
             
@@ -688,6 +826,27 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
       Alert.alert('Info', 'Please finalize settlement first');
       return;
     }
+
+    try {
+      const dateStr = settlementDate.toISOString().split('T')[0];
+      const staffData = getStaffBreakdown(salesList);
+      const printed = await UniversalPrinter.printSettlementReportThermal(
+        summary,
+        cashFlow,
+        paymodeBreakdown,
+        staffData,
+        cashierName,
+        outletName,
+        dateStr
+      );
+      if (printed) {
+        Alert.alert('✅ Success', 'Settlement report printed on thermal printer');
+        return;
+      }
+    } catch (e) {
+      console.log('Thermal print failed, falling back to PDF:', e);
+    }
+
     await Print.printAsync({ html: generateHTML() });
   };
   
@@ -919,7 +1078,56 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
                 <Text style={styles.netLabel}>NET SALES</Text>
                 <Text style={styles.netValue}>{formatPrice(summary.netSales)}</Text>
               </View>
-              
+
+              {/* Payment Methods Breakdown */}
+              <View style={[styles.section, { backgroundColor: theme.surface, marginTop: 12 }]}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>💳 Payment Breakdown</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
+                  {paymodeBreakdown.cash > 0 && (
+                    <View style={[styles.summaryCard, { flex: 1, minWidth: 100, backgroundColor: theme.background }]}>
+                      <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>💵 Cash</Text>
+                      <Text style={[styles.summaryValue, { color: theme.text, fontSize: 16 }]}>{formatPrice(paymodeBreakdown.cash)}</Text>
+                    </View>
+                  )}
+                  {paymodeBreakdown.paynow > 0 && (
+                    <View style={[styles.summaryCard, { flex: 1, minWidth: 100, backgroundColor: theme.background }]}>
+                      <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>📱 PayNow</Text>
+                      <Text style={[styles.summaryValue, { color: theme.text, fontSize: 16 }]}>{formatPrice(paymodeBreakdown.paynow)}</Text>
+                    </View>
+                  )}
+                  {paymodeBreakdown.upi > 0 && (
+                    <View style={[styles.summaryCard, { flex: 1, minWidth: 100, backgroundColor: theme.background }]}>
+                      <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>📱 UPI</Text>
+                      <Text style={[styles.summaryValue, { color: theme.text, fontSize: 16 }]}>{formatPrice(paymodeBreakdown.upi)}</Text>
+                    </View>
+                  )}
+                  {paymodeBreakdown.card > 0 && (
+                    <View style={[styles.summaryCard, { flex: 1, minWidth: 100, backgroundColor: theme.background }]}>
+                      <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>💳 Card</Text>
+                      <Text style={[styles.summaryValue, { color: theme.text, fontSize: 16 }]}>{formatPrice(paymodeBreakdown.card)}</Text>
+                    </View>
+                  )}
+                  {paymodeBreakdown.valuecard > 0 && (
+                    <View style={[styles.summaryCard, { flex: 1, minWidth: 100, backgroundColor: theme.background }]}>
+                      <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>💎 Value Card</Text>
+                      <Text style={[styles.summaryValue, { color: theme.text, fontSize: 16 }]}>{formatPrice(paymodeBreakdown.valuecard)}</Text>
+                    </View>
+                  )}
+                  {paymodeBreakdown.cdc > 0 && (
+                    <View style={[styles.summaryCard, { flex: 1, minWidth: 100, backgroundColor: theme.background }]}>
+                      <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>🎫 CDC Voucher</Text>
+                      <Text style={[styles.summaryValue, { color: theme.text, fontSize: 16 }]}>{formatPrice(paymodeBreakdown.cdc)}</Text>
+                    </View>
+                  )}
+                  {paymodeBreakdown.other > 0 && (
+                    <View style={[styles.summaryCard, { flex: 1, minWidth: 100, backgroundColor: theme.background }]}>
+                      <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>💵 Other</Text>
+                      <Text style={[styles.summaryValue, { color: theme.text, fontSize: 16 }]}>{formatPrice(paymodeBreakdown.other)}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
               <View style={[styles.section, { backgroundColor: theme.surface }]}>
                 <Text style={[styles.sectionTitle, { color: theme.text }]}>💰 Cash Flow</Text>
                 <View style={styles.cashRow}>
@@ -982,6 +1190,90 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
                 </View>
               )}
               
+              {/* Staff Sales Breakdown */}
+              <View style={[styles.section, { backgroundColor: theme.surface, marginTop: 12 }]}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>👤 Staff Sales Breakdown</Text>
+                {getStaffBreakdown(salesList).map((staff, idx) => (
+                  <View 
+                    key={`staff-breakdown-${idx}`}
+                    style={{
+                      borderBottomWidth: idx < getStaffBreakdown(salesList).length - 1 ? 1 : 0,
+                      borderColor: theme.border,
+                      paddingVertical: 10,
+                      gap: 4
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ fontWeight: 'bold', color: theme.text, fontSize: 15 }}>
+                        {staff.name}
+                      </Text>
+                      <Text style={{ fontWeight: 'bold', color: theme.primary, fontSize: 15 }}>
+                        {formatPrice(staff.totalSales)}
+                      </Text>
+                    </View>
+                    
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                      {staff.cash > 0 && (
+                        <Text style={{ fontSize: 12, color: theme.textSecondary }}>💵 Cash: {formatPrice(staff.cash)}</Text>
+                      )}
+                      {staff.paynow > 0 && (
+                        <Text style={{ fontSize: 12, color: theme.textSecondary }}>📱 PayNow: {formatPrice(staff.paynow)}</Text>
+                      )}
+                      {staff.upi > 0 && (
+                        <Text style={{ fontSize: 12, color: theme.textSecondary }}>📱 UPI: {formatPrice(staff.upi)}</Text>
+                      )}
+                      {staff.card > 0 && (
+                        <Text style={{ fontSize: 12, color: theme.textSecondary }}>💳 Card: {formatPrice(staff.card)}</Text>
+                      )}
+                      {staff.valuecard > 0 && (
+                        <Text style={{ fontSize: 12, color: theme.textSecondary }}>💎 Value Card: {formatPrice(staff.valuecard)}</Text>
+                      )}
+                      {staff.other > 0 && (
+                        <Text style={{ fontSize: 12, color: theme.textSecondary }}>💵 Other: {formatPrice(staff.other)}</Text>
+                      )}
+                    </View>
+
+                    {/* Categories & Items details */}
+                    {Object.keys(staff.categories).length > 0 && (
+                      <View style={{ marginTop: 8, paddingLeft: 8, borderLeftWidth: 1.5, borderColor: theme.primary + '30', gap: 4 }}>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: theme.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                          Categories
+                        </Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+                          {Object.entries(staff.categories).map(([catName, amount]) => (
+                            <Text key={catName} style={{ fontSize: 11, color: theme.text, backgroundColor: theme.background, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                              {catName}: {formatPrice(amount)}
+                            </Text>
+                          ))}
+                        </View>
+                        
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: theme.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                          Items
+                        </Text>
+                        <View style={{ gap: 2 }}>
+                          {Object.entries(staff.items).map(([itemName, data]: any) => (
+                            <View key={itemName} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingRight: 4 }}>
+                              <Text style={{ fontSize: 11, color: theme.textSecondary }}>
+                                • {itemName}
+                              </Text>
+                              <Text style={{ fontSize: 11, fontWeight: '500', color: theme.text }}>
+                                {data.qty}x ({formatPrice(data.revenue)})
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                ))}
+
+                {salesList.length === 0 && (
+                  <Text style={{ color: theme.textSecondary, textAlign: 'center', marginVertical: 10 }}>
+                    No sales recorded.
+                  </Text>
+                )}
+              </View>
+
               {isSettled ? (
                 <View style={styles.actionGrid}>
                   <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.primary }]} onPress={handlePrint}>

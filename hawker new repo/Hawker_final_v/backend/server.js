@@ -32,6 +32,7 @@ const emailRoutes = require('./routes/emailRoutes');
 const outletRoutes = require('./routes/outletRoutes');
 const yeahpayRoutes = require('./routes/yeahpayRoutes');
 const dayEndRoutes = require('./routes/dayEndRoutes');
+const staffRoutes = require('./routes/staffRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const uploadDir = path.join(__dirname, 'uploads');
@@ -235,6 +236,7 @@ app.use('/api', emailRoutes);
 app.use('/api/outlet', authenticateToken, outletRoutes);
 app.use('/api/yeahpay', authenticateToken, yeahpayRoutes);
 app.use('/api/dayend', authenticateToken, dayEndRoutes);
+app.use('/api/staff', staffRoutes);
 app.use('/api/email', authenticateToken, emailRoutes);
 // Add near the top after middleware
 app.get('/health', (req, res) => {
