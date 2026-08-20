@@ -12,6 +12,8 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import API from '../api';
 import SunmiPrinterService from './SunmiPrinterService';
+import BillPDFGenerator from './BillPDFGenerator';
+import NetworkPrinterService from './NetworkPrinterService';
 
 
 interface DayEndModalProps {
@@ -526,6 +528,21 @@ const printDayEndReport = async (dayEndData: any) => {
         
         const reportText = buildDayEndReportText(reportData, outletName);
         
+        // Check network printer
+        const company = await BillPDFGenerator.loadSettings();
+        if (company.printerEnabled) {
+            console.log('🔌 Network printer enabled, printing Day End Report...');
+            const printed = await NetworkPrinterService.printRawText(
+                company.printerIP || '192.168.0.241',
+                company.printerPort || 9100,
+                reportText
+            );
+            if (printed) {
+                console.log('✅ Day End Report printed on Network Printer');
+                return;
+            }
+        }
+        
         const sunmiReady = await SunmiPrinterService.init();
         if (sunmiReady) {
             await SunmiPrinterService.printRawText(reportText);
@@ -567,12 +584,26 @@ const printDayEndReport = async (dayEndData: any) => {
             closingDate: item.closingDate  // ✅ FIX: Original day end date
         };
         
-        const reportText = buildDayEndReportText(reportData, outletName);
-        
         const reprintText = '='.repeat(32) + '\n' +
                            centerText('REPRINT', 32) + '\n' +
                            '='.repeat(32) + '\n\n' +
                            reportText;
+        
+        // Check network printer
+        const company = await BillPDFGenerator.loadSettings();
+        if (company.printerEnabled) {
+            console.log('🔌 Network printer enabled, reprinting Day End Report...');
+            const printed = await NetworkPrinterService.printRawText(
+                company.printerIP || '192.168.0.241',
+                company.printerPort || 9100,
+                reprintText
+            );
+            if (printed) {
+                console.log('✅ Day End Report reprinted on Network Printer');
+                Alert.alert('🖨️ Success', 'Report reprinted successfully!');
+                return;
+            }
+        }
         
         const sunmiReady = await SunmiPrinterService.init();
         if (sunmiReady) {

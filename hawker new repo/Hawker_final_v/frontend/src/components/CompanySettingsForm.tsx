@@ -40,6 +40,10 @@ interface CompanySettings {
   halalLogo?: string;
   showCompanyLogo?: boolean;
   showHalalLogo?: boolean;
+  printerType?: 'network' | 'sunmi';
+  printerIP?: string;
+  printerPort?: number;
+  printerEnabled?: boolean;
 }
 
 interface Props {
@@ -65,7 +69,7 @@ const CompanySettingsForm: React.FC<Props> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const { refreshCurrency } = useCurrency();
-  
+
   const [settings, setSettings] = useState<CompanySettings>({
     name: userShopName || '',
     address: '',
@@ -81,17 +85,17 @@ const CompanySettingsForm: React.FC<Props> = ({
     showCompanyLogo: true,
     showHalalLogo: true,
   });
-  
+
   const [enableGST, setEnableGST] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingCompanyLogo, setUploadingCompanyLogo] = useState(false);
   const [uploadingHalalLogo, setUploadingHalalLogo] = useState(false);
-// Add these with other useState declarations
-const [printerType, setPrinterType] = useState<'network' | 'sunmi'>('network');
-const [printerIP, setPrinterIP] = useState('192.168.0.244'); // ← Change to 244!
-const [printerPort, setPrinterPort] = useState('80');
-const [printerEnabled, setPrinterEnabled] = useState(false);
-const [testingPrinter, setTestingPrinter] = useState(false);
+  // Add these with other useState declarations
+  const [printerType, setPrinterType] = useState<'network' | 'sunmi'>('network');
+  const [printerIP, setPrinterIP] = useState('192.168.0.244'); // ← Change to 244!
+  const [printerPort, setPrinterPort] = useState('80');
+  const [printerEnabled, setPrinterEnabled] = useState(false);
+  const [testingPrinter, setTestingPrinter] = useState(false);
   useEffect(() => {
     if (visible) {
       loadClientSettings();
@@ -112,51 +116,52 @@ const [testingPrinter, setTestingPrinter] = useState(false);
 
   const loadClientSettings = async () => {
     try {
-        if (clientId) {
-            console.log('🔄 Loading client settings with clientId:', clientId);
-            console.log('🔄 clientId type:', typeof clientId);
-            console.log('🔄 userShopName from parent:', userShopName);
-            
-            const savedSettings = await BillPDFGenerator.loadSettings(clientId);
-            
-            console.log('📥 SAVED SETTINGS FROM BILLPDFGENERATOR:', {
-                showCompanyLogo: savedSettings.showCompanyLogo,
-                showHalalLogo: savedSettings.showHalalLogo,
-                name: savedSettings.name,
-                type: typeof savedSettings.showCompanyLogo
-            });
-            
-            setSettings({
-                name: userShopName || savedSettings.name || '',
-                address: savedSettings.address || '',
-                gstNo: savedSettings.gstNo || '',
-                gstPercentage: savedSettings.gstPercentage || 0,
-                phone: savedSettings.phone || '',
-                email: savedSettings.email || '',
-                cashierName: savedSettings.cashierName || defaultCashier || '',
-                currency: savedSettings.currency || 'SGD',
-                currencySymbol: savedSettings.currencySymbol || '$',
-                companyLogo: savedSettings.companyLogo || '',
-                halalLogo: savedSettings.halalLogo || '',
-                showCompanyLogo: savedSettings.showCompanyLogo,
-                showHalalLogo: savedSettings.showHalalLogo,
-            });
-            
-            setEnableGST(savedSettings.gstPercentage > 0);
-            const printerRes = await API.get(`/company-settings/printer/${clientId}`);
-  if (printerRes.data) {
-    setPrinterType(printerRes.data.printerType || 'network');
-    setPrinterIP(printerRes.data.printerIP || '192.168.0.241');
-    setPrinterPort(printerRes.data.printerPort?.toString() || '9100');
-    setPrinterEnabled(printerRes.data.printerEnabled || false);
-  }
-        } else {
-            console.log('⚠️ No clientId provided!');
-        }
+      if (clientId) {
+        console.log('🔄 Loading client settings with clientId:', clientId);
+        console.log('🔄 clientId type:', typeof clientId);
+        console.log('🔄 userShopName from parent:', userShopName);
+
+        const savedSettings = await BillPDFGenerator.loadSettings(clientId);
+
+        console.log('📥 SAVED SETTINGS FROM BILLPDFGENERATOR:', {
+          showCompanyLogo: savedSettings.showCompanyLogo,
+          showHalalLogo: savedSettings.showHalalLogo,
+          name: savedSettings.name,
+          type: typeof savedSettings.showCompanyLogo
+        });
+
+        setSettings({
+          name: userShopName || savedSettings.name || '',
+          address: savedSettings.address || '',
+          gstNo: savedSettings.gstNo || '',
+          gstPercentage: savedSettings.gstPercentage || 0,
+          phone: savedSettings.phone || '',
+          email: savedSettings.email || '',
+          cashierName: savedSettings.cashierName || defaultCashier || '',
+          currency: savedSettings.currency || 'SGD',
+          currencySymbol: savedSettings.currencySymbol || '$',
+          companyLogo: savedSettings.companyLogo || '',
+          halalLogo: savedSettings.halalLogo || '',
+          showCompanyLogo: savedSettings.showCompanyLogo,
+          showHalalLogo: savedSettings.showHalalLogo,
+          printerType: savedSettings.printerType || 'network',
+          printerIP: savedSettings.printerIP || '192.168.0.241',
+          printerPort: savedSettings.printerPort || 9100,
+          printerEnabled: savedSettings.printerEnabled || false,
+        });
+
+        setEnableGST(savedSettings.gstPercentage > 0);
+        setPrinterType(savedSettings.printerType || 'network');
+        setPrinterIP(savedSettings.printerIP || '192.168.0.241');
+        setPrinterPort(savedSettings.printerPort?.toString() || '9100');
+        setPrinterEnabled(savedSettings.printerEnabled || false);
+      } else {
+        console.log('⚠️ No clientId provided!');
+      }
     } catch (error) {
-        console.log('Error loading settings:', error);
+      console.log('Error loading settings:', error);
     }
-};
+  };
 
   const uploadLogo = async (imageUri: string, type: 'company' | 'halal') => {
     try {
@@ -173,13 +178,13 @@ const [testingPrinter, setTestingPrinter] = useState(false);
 
       const imageUrl = response.data.imageUrl || response.data.imageUri;
       const fullUrl = imageUrl.startsWith('http') ? imageUrl : `https://smartretail-production-5457.up.railway.app${imageUrl}`;
-      
+
       if (type === 'company') {
         setSettings(prev => ({ ...prev, companyLogo: fullUrl }));
       } else {
         setSettings(prev => ({ ...prev, halalLogo: fullUrl }));
       }
-      
+
       return fullUrl;
     } catch (error) {
       console.log('Upload error:', error);
@@ -189,44 +194,44 @@ const [testingPrinter, setTestingPrinter] = useState(false);
 
   const pickImage = async (type: 'company' | 'halal') => {
     try {
-        // @ts-ignore
-        if (window.__markImagePickerOpen) {
-            console.log('📸 Marking image picker as open');
-            window.__markImagePickerOpen();
-        }
-        
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-        });
+      // @ts-ignore
+      if (window.__markImagePickerOpen) {
+        console.log('📸 Marking image picker as open');
+        window.__markImagePickerOpen();
+      }
 
-        if (!result.canceled && result.assets && result.assets[0]) {
-            if (type === 'company') {
-                setUploadingCompanyLogo(true);
-                await uploadLogo(result.assets[0].uri, 'company');
-                setUploadingCompanyLogo(false);
-            } else {
-                setUploadingHalalLogo(true);
-                await uploadLogo(result.assets[0].uri, 'halal');
-                setUploadingHalalLogo(false);
-            }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        if (type === 'company') {
+          setUploadingCompanyLogo(true);
+          await uploadLogo(result.assets[0].uri, 'company');
+          setUploadingCompanyLogo(false);
+        } else {
+          setUploadingHalalLogo(true);
+          await uploadLogo(result.assets[0].uri, 'halal');
+          setUploadingHalalLogo(false);
         }
+      }
     } catch (error) {
-        Alert.alert('Error', 'Failed to upload image');
-        if (type === 'company') setUploadingCompanyLogo(false);
-        else setUploadingHalalLogo(false);
+      Alert.alert('Error', 'Failed to upload image');
+      if (type === 'company') setUploadingCompanyLogo(false);
+      else setUploadingHalalLogo(false);
     } finally {
-        setTimeout(() => {
-            // @ts-ignore
-            if (window.__markImagePickerClose) {
-                console.log('📸 Marking image picker as closed (after delay)');
-                window.__markImagePickerClose();
-            }
-        }, 500);
+      setTimeout(() => {
+        // @ts-ignore
+        if (window.__markImagePickerClose) {
+          console.log('📸 Marking image picker as closed (after delay)');
+          window.__markImagePickerClose();
+        }
+      }, 500);
     }
-};
+  };
 
   const removeLogo = (type: 'company' | 'halal') => {
     if (type === 'company') {
@@ -238,91 +243,91 @@ const [testingPrinter, setTestingPrinter] = useState(false);
 
   const handleSave = async () => {
     console.log('🔍 HANDLE SAVE - Current settings:', {
-        showCompanyLogo: settings.showCompanyLogo,
-        showHalalLogo: settings.showHalalLogo,
-        gstPercentage: settings.gstPercentage,
-        enableGST: enableGST,
-        companyLogo: settings.companyLogo ? 'YES' : 'NO',
-        halalLogo: settings.halalLogo ? 'YES' : 'NO'
+      showCompanyLogo: settings.showCompanyLogo,
+      showHalalLogo: settings.showHalalLogo,
+      gstPercentage: settings.gstPercentage,
+      enableGST: enableGST,
+      companyLogo: settings.companyLogo ? 'YES' : 'NO',
+      halalLogo: settings.halalLogo ? 'YES' : 'NO'
     });
 
     if (!settings.name.trim()) {
-        Alert.alert(t.error, 'Shop name is required for bill receipt');
-        return;
+      Alert.alert(t.error, 'Shop name is required for bill receipt');
+      return;
     }
 
     const finalSettings = {
-        ...settings,
-        gstPercentage: enableGST ? settings.gstPercentage : 0,
-        showCompanyLogo: settings.showCompanyLogo,
-        showHalalLogo: settings.showHalalLogo,
-        companyLogo: settings.companyLogo,
-        halalLogo: settings.halalLogo,
-          printerType: printerType,
-    printerIP: printerIP,
-    printerPort: parseInt(printerPort),
-    printerEnabled: printerEnabled
+      ...settings,
+      gstPercentage: enableGST ? settings.gstPercentage : 0,
+      showCompanyLogo: settings.showCompanyLogo,
+      showHalalLogo: settings.showHalalLogo,
+      companyLogo: settings.companyLogo,
+      halalLogo: settings.halalLogo,
+      printerType: printerType,
+      printerIP: printerIP,
+      printerPort: parseInt(printerPort),
+      printerEnabled: printerEnabled
     };
 
     console.log('🔍 FINAL SETTINGS TO SAVE:', {
-        gstPercentage: finalSettings.gstPercentage,
-        enableGST: enableGST,
-        showCompanyLogo: finalSettings.showCompanyLogo,
-        showHalalLogo: finalSettings.showHalalLogo
+      gstPercentage: finalSettings.gstPercentage,
+      enableGST: enableGST,
+      showCompanyLogo: finalSettings.showCompanyLogo,
+      showHalalLogo: finalSettings.showHalalLogo
     });
 
     setSaving(true);
-    
+
     try {
-        const success = await BillPDFGenerator.saveSettings(finalSettings, clientId);
-        
-        if (success) {
-            console.log('✅ Save successful, waiting for DB commit...');
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            console.log('🔄 Reloading settings from DB...');
-            const freshSettings = await BillPDFGenerator.loadSettings(clientId);
-            
-            console.log('📥 FRESH SETTINGS FROM DB:', {
-                gstPercentage: freshSettings.gstPercentage,
-                showCompanyLogo: freshSettings.showCompanyLogo,
-                showHalalLogo: freshSettings.showHalalLogo,
-                companyLogo: freshSettings.companyLogo ? 'YES' : 'NO',
-                halalLogo: freshSettings.halalLogo ? 'YES' : 'NO'
-            });
-            
-            setSettings({
-                ...settings,
-                gstPercentage: freshSettings.gstPercentage,
-                showCompanyLogo: freshSettings.showCompanyLogo,
-                showHalalLogo: freshSettings.showHalalLogo,
-                companyLogo: freshSettings.companyLogo,
-                halalLogo: freshSettings.halalLogo
-            });
-             if (clientId) {
-    await API.post(`/company-settings/printer/${clientId}`, {
-      printerType,
-      printerIP,
-      printerPort: parseInt(printerPort),
-      printerEnabled
-    }).catch(err => console.log('Printer save error:', err));
-  }
-            setEnableGST(freshSettings.gstPercentage > 0);
-            await refreshCurrency();
-            await new Promise(resolve => setTimeout(resolve, 300));
-            onSave(finalSettings);
-            Alert.alert(t.success, 'Settings saved successfully');
-            onClose();
-        } else {
-            Alert.alert(t.error, 'Failed to save settings');
+      const success = await BillPDFGenerator.saveSettings(finalSettings, clientId);
+
+      if (success) {
+        console.log('✅ Save successful, waiting for DB commit...');
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        console.log('🔄 Reloading settings from DB...');
+        const freshSettings = await BillPDFGenerator.loadSettings(clientId);
+
+        console.log('📥 FRESH SETTINGS FROM DB:', {
+          gstPercentage: freshSettings.gstPercentage,
+          showCompanyLogo: freshSettings.showCompanyLogo,
+          showHalalLogo: freshSettings.showHalalLogo,
+          companyLogo: freshSettings.companyLogo ? 'YES' : 'NO',
+          halalLogo: freshSettings.halalLogo ? 'YES' : 'NO'
+        });
+
+        setSettings({
+          ...settings,
+          gstPercentage: freshSettings.gstPercentage,
+          showCompanyLogo: freshSettings.showCompanyLogo,
+          showHalalLogo: freshSettings.showHalalLogo,
+          companyLogo: freshSettings.companyLogo,
+          halalLogo: freshSettings.halalLogo
+        });
+        if (clientId) {
+          await API.post(`/company-settings/printer/${clientId}`, {
+            printerType,
+            printerIP,
+            printerPort: parseInt(printerPort),
+            printerEnabled
+          }).catch(err => console.log('Printer save error:', err));
         }
-    } catch (error) {
-        console.log('❌ Save error:', error);
+        setEnableGST(freshSettings.gstPercentage > 0);
+        await refreshCurrency();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        onSave(finalSettings);
+        Alert.alert(t.success, 'Settings saved successfully');
+        onClose();
+      } else {
         Alert.alert(t.error, 'Failed to save settings');
+      }
+    } catch (error) {
+      console.log('❌ Save error:', error);
+      Alert.alert(t.error, 'Failed to save settings');
     } finally {
-        setSaving(false);
+      setSaving(false);
     }
-};
+  };
 
   const currencyOptions = [
     { code: 'SGD', symbol: '$', name: 'Singapore Dollar' },
@@ -332,50 +337,50 @@ const [testingPrinter, setTestingPrinter] = useState(false);
     { code: 'EUR', symbol: '€', name: 'Euro' },
     { code: 'GBP', symbol: '£', name: 'British Pound' },
   ];
-const testNetworkPrinter = async () => {
-  setTestingPrinter(true);
-  
-  try {
-    const ip = printerIP.trim();
-    const port = parseInt(printerPort) || 9100;
-    
-    console.log(`🔍 Testing printer at ${ip}:${port}`);
-    
-    // ✅ Call the test function from NetworkPrinterService
-    const result = await NetworkPrinterService.testConnection(ip, port);
-    
-    if (result) {
-      Alert.alert(
-        '✅ Success', 
-        `Printer is reachable at ${ip}:${port}!`,
-        [{ text: 'OK' }]
-      );
-    } else {
-      Alert.alert(
-        '❌ Failed', 
-        `Cannot reach printer at ${ip}:${port}\n\n` +
-        `Please check:\n` +
-        `• Printer is ON\n` +
-        `• Same WiFi network\n` +
-        `• IP address is correct: ${ip}\n` +
-        `• Port is correct: ${port}`,
-        [{ text: 'OK' }]
-      );
+  const testNetworkPrinter = async () => {
+    setTestingPrinter(true);
+
+    try {
+      const ip = printerIP.trim();
+      const port = parseInt(printerPort) || 9100;
+
+      console.log(`🔍 Testing printer at ${ip}:${port}`);
+
+      // ✅ Call the test function from NetworkPrinterService
+      const result = await NetworkPrinterService.testConnection(ip, port);
+
+      if (result) {
+        Alert.alert(
+          '✅ Success',
+          `Printer is reachable at ${ip}:${port}!`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          '❌ Failed',
+          `Cannot reach printer at ${ip}:${port}\n\n` +
+          `Please check:\n` +
+          `• Printer is ON\n` +
+          `• Same WiFi network\n` +
+          `• IP address is correct: ${ip}\n` +
+          `• Port is correct: ${port}`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error: any) {
+      console.log('Test error:', error);
+      Alert.alert('Error', 'Failed to test printer: ' + (error?.message || 'Unknown error'));
+    } finally {
+      setTestingPrinter(false);
     }
-  } catch (error: any) {
-    console.log('Test error:', error);
-    Alert.alert('Error', 'Failed to test printer: ' + (error?.message || 'Unknown error'));
-  } finally {
-    setTestingPrinter(false);
-  }
-};
+  };
 
   return (
     <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.fullScreenModal, { backgroundColor: theme.background }]}>
-        
+
         {/* Header - Full Screen */}
-        <View style={[styles.fullScreenHeader, { backgroundColor: theme.primary, paddingTop: insets.top  }]}>
+        <View style={[styles.fullScreenHeader, { backgroundColor: theme.primary, paddingTop: insets.top }]}>
           <Text style={[styles.fullScreenTitle, { color: '#fff' }]}>Bill Settings</Text>
           <TouchableOpacity onPress={onClose} style={styles.fullScreenClose}>
             <Ionicons name="close" size={28} color="#fff" />
@@ -383,7 +388,7 @@ const testNetworkPrinter = async () => {
         </View>
 
         {/* Scrollable Content */}
-        <ScrollView 
+        <ScrollView
           style={styles.fullScreenScroll}
           contentContainerStyle={styles.fullScreenContent}
           keyboardShouldPersistTaps="handled"
@@ -391,7 +396,7 @@ const testNetworkPrinter = async () => {
         >
           {/* Shop Name - READONLY */}
           <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Shop Name (from Admin) *</Text>
-          <View style={[styles.fullReadonlyField, { 
+          <View style={[styles.fullReadonlyField, {
             backgroundColor: theme.surface + '80',
             borderColor: theme.border
           }]}>
@@ -403,13 +408,13 @@ const testNetworkPrinter = async () => {
           {/* Address */}
           <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Address</Text>
           <TextInput
-            style={[styles.fullInput, styles.fullTextArea, { 
+            style={[styles.fullInput, styles.fullTextArea, {
               backgroundColor: theme.surface,
               color: theme.text,
               borderColor: theme.border
             }]}
             value={settings.address}
-            onChangeText={(text) => setSettings({...settings, address: text})}
+            onChangeText={(text) => setSettings({ ...settings, address: text })}
             placeholder="Enter address"
             placeholderTextColor={theme.textSecondary}
             multiline
@@ -440,11 +445,11 @@ const testNetworkPrinter = async () => {
                 disabled={saving}
               />
             </View>
-            
+
             {settings.showCompanyLogo && (
               <View style={styles.fullLogoUploadContainer}>
                 <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Company Logo</Text>
-                
+
                 {settings.companyLogo ? (
                   <View style={styles.fullLogoPreviewContainer}>
                     <Image source={{ uri: settings.companyLogo }} style={styles.fullLogoPreview} />
@@ -487,11 +492,11 @@ const testNetworkPrinter = async () => {
                 disabled={saving}
               />
             </View>
-            
+
             {settings.showHalalLogo && (
               <View style={styles.fullLogoUploadContainer}>
                 <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Halal Logo</Text>
-                
+
                 {settings.halalLogo ? (
                   <View style={styles.fullLogoPreviewContainer}>
                     <Image source={{ uri: settings.halalLogo }} style={styles.fullLogoPreview} />
@@ -527,7 +532,7 @@ const testNetworkPrinter = async () => {
                 key={curr.code}
                 style={[
                   styles.fullCurrencyChip,
-                  { 
+                  {
                     backgroundColor: settings.currency === curr.code ? theme.primary : theme.surface,
                     borderColor: theme.border
                   }
@@ -551,7 +556,7 @@ const testNetworkPrinter = async () => {
           {/* Currency Code */}
           <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Currency Code</Text>
           <TextInput
-            style={[styles.fullInput, { 
+            style={[styles.fullInput, {
               backgroundColor: theme.surface,
               color: theme.text,
               borderColor: theme.border
@@ -578,13 +583,13 @@ const testNetworkPrinter = async () => {
           {/* Currency Symbol */}
           <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Currency Symbol</Text>
           <TextInput
-            style={[styles.fullInput, { 
+            style={[styles.fullInput, {
               backgroundColor: theme.surface,
               color: theme.text,
               borderColor: theme.border
             }]}
             value={settings.currencySymbol}
-            onChangeText={(text) => setSettings({...settings, currencySymbol: text})}
+            onChangeText={(text) => setSettings({ ...settings, currencySymbol: text })}
             placeholder="$"
             placeholderTextColor={theme.textSecondary}
             maxLength={3}
@@ -607,13 +612,13 @@ const testNetworkPrinter = async () => {
             <>
               <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>GST Number</Text>
               <TextInput
-                style={[styles.fullInput, { 
+                style={[styles.fullInput, {
                   backgroundColor: theme.surface,
                   color: theme.text,
                   borderColor: theme.border
                 }]}
                 value={settings.gstNo}
-                onChangeText={(text) => setSettings({...settings, gstNo: text})}
+                onChangeText={(text) => setSettings({ ...settings, gstNo: text })}
                 placeholder="Enter GST number"
                 placeholderTextColor={theme.textSecondary}
                 editable={!saving}
@@ -621,7 +626,7 @@ const testNetworkPrinter = async () => {
 
               <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>GST Percentage (%)</Text>
               <TextInput
-                style={[styles.fullInput, { 
+                style={[styles.fullInput, {
                   backgroundColor: theme.surface,
                   color: theme.text,
                   borderColor: theme.border
@@ -629,10 +634,10 @@ const testNetworkPrinter = async () => {
                 value={settings.gstPercentage === 0 ? '' : settings.gstPercentage.toString()}
                 onChangeText={(text) => {
                   if (text === '') {
-                    setSettings({...settings, gstPercentage: 0});
+                    setSettings({ ...settings, gstPercentage: 0 });
                   } else {
                     const num = parseFloat(text);
-                    if (!isNaN(num)) setSettings({...settings, gstPercentage: num});
+                    if (!isNaN(num)) setSettings({ ...settings, gstPercentage: num });
                   }
                 }}
                 placeholder="0"
@@ -642,130 +647,17 @@ const testNetworkPrinter = async () => {
               />
             </>
           )}
-{/* ========== PRINTER SETTINGS SECTION ========== */}
-<View style={styles.fullSectionHeader}>
-  <Text style={[styles.fullSectionTitle, { color: theme.text }]}>🖨️ Printer Settings</Text>
-  <Text style={[styles.fullSectionHint, { color: theme.textSecondary }]}>
-    Configure thermal printer for automatic bill printing
-  </Text>
-</View>
 
-<View style={[styles.fullCard, { backgroundColor: theme.surface }]}>
-  {/* Enable Printer Switch */}
-  <View style={styles.fullSwitchRow}>
-    <View style={styles.fullSwitchLeft}>
-      <Ionicons name="print" size={24} color={theme.primary} />
-      <Text style={[styles.fullSwitchLabel, { color: theme.text }]}>Enable Auto Print</Text>
-    </View>
-    <Switch
-      value={printerEnabled}
-      onValueChange={setPrinterEnabled}
-      trackColor={{ false: theme.inactive, true: theme.success }}
-      thumbColor="#fff"
-    />
-  </View>
-
-  {printerEnabled && (
-    <>
-      {/* Printer Type Selection */}
-      <Text style={[styles.fullLabel, { color: theme.textSecondary, marginTop: 15 }]}>Printer Type</Text>
-      <View style={styles.printerTypeRow}>
-        <TouchableOpacity
-          style={[
-            styles.printerTypeBtn,
-            printerType === 'network' && { backgroundColor: theme.primary }
-          ]}
-          onPress={() => setPrinterType('network')}
-        >
-          <Text style={{ color: printerType === 'network' ? '#fff' : theme.text }}>
-            🌐 Network (IP)
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.printerTypeBtn,
-            printerType === 'sunmi' && { backgroundColor: theme.primary }
-          ]}
-          onPress={() => setPrinterType('sunmi')}
-        >
-          <Text style={{ color: printerType === 'sunmi' ? '#fff' : theme.text }}>
-            📱 Sunmi Built-in
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Network Printer Settings */}
-      {printerType === 'network' && (
-        <>
-          <Text style={[styles.fullLabel, { color: theme.textSecondary, marginTop: 15 }]}>
-            Printer IP Address
-          </Text>
-          <TextInput
-            style={[styles.fullInput, {
-              backgroundColor: theme.surface,
-              color: theme.text,
-              borderColor: theme.border
-            }]}
-            placeholder="192.168.0.241"
-            value={printerIP}
-            onChangeText={setPrinterIP}
-          />
-
-          <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>
-            Port (Default: 9100)
-          </Text>
-          <TextInput
-            style={[styles.fullInput, {
-              backgroundColor: theme.surface,
-              color: theme.text,
-              borderColor: theme.border
-            }]}
-            placeholder="9100"
-            value={printerPort}
-            onChangeText={setPrinterPort}
-            keyboardType="numeric"
-          />
-
-         {/* Test Printer Button */}
-<TouchableOpacity
-  style={[styles.testPrinterBtn, { backgroundColor: theme.primary }]}
-  onPress={testNetworkPrinter}
-  disabled={testingPrinter}
->
-  {testingPrinter ? (
-    <ActivityIndicator size="small" color="#fff" />
-  ) : (
-    <>
-      <Ionicons name="print-outline" size={20} color="#fff" />
-      <Text style={{ color: '#fff', marginLeft: 8 }}>🔍 Test Printer Connection</Text>
-    </>
-  )}
-</TouchableOpacity>
-        </>
-      )}
-
-      {/* Sunmi Printer Info */}
-      {printerType === 'sunmi' && (
-        <View style={[styles.infoBox, { backgroundColor: theme.success + '20', marginTop: 15 }]}>
-          <Ionicons name="checkmark-circle" size={20} color={theme.success} />
-          <Text style={{ color: theme.success, flex: 1, marginLeft: 10 }}>
-            Sunmi printer will be auto-detected
-          </Text>
-        </View>
-      )}
-    </>
-  )}
-</View>
           {/* Phone */}
           <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Phone Number</Text>
           <TextInput
-            style={[styles.fullInput, { 
+            style={[styles.fullInput, {
               backgroundColor: theme.surface,
               color: theme.text,
               borderColor: theme.border
             }]}
             value={settings.phone}
-            onChangeText={(text) => setSettings({...settings, phone: text})}
+            onChangeText={(text) => setSettings({ ...settings, phone: text })}
             placeholder="Enter phone number"
             placeholderTextColor={theme.textSecondary}
             keyboardType="phone-pad"
@@ -775,13 +667,13 @@ const testNetworkPrinter = async () => {
           {/* Email */}
           <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Email Address</Text>
           <TextInput
-            style={[styles.fullInput, { 
+            style={[styles.fullInput, {
               backgroundColor: theme.surface,
               color: theme.text,
               borderColor: theme.border
             }]}
             value={settings.email}
-            onChangeText={(text) => setSettings({...settings, email: text})}
+            onChangeText={(text) => setSettings({ ...settings, email: text })}
             placeholder="Enter email"
             placeholderTextColor={theme.textSecondary}
             keyboardType="email-address"
@@ -791,17 +683,90 @@ const testNetworkPrinter = async () => {
           {/* Cashier Name */}
           <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Default Cashier Name</Text>
           <TextInput
-            style={[styles.fullInput, { 
+            style={[styles.fullInput, {
               backgroundColor: theme.surface,
               color: theme.text,
               borderColor: theme.border
             }]}
             value={settings.cashierName}
-            onChangeText={(text) => setSettings({...settings, cashierName: text})}
+            onChangeText={(text) => setSettings({ ...settings, cashierName: text })}
             placeholder="Cashier name"
             placeholderTextColor={theme.textSecondary}
             editable={!saving}
           />
+
+          {/* Printer Settings Header */}
+          <View style={styles.fullSectionHeader}>
+            <Text style={[styles.fullSectionTitle, { color: theme.text }]}>🖨️ Printer Settings</Text>
+            <Text style={[styles.fullSectionHint, { color: theme.textSecondary }]}>
+              Configure Network / Thermal Printer
+            </Text>
+          </View>
+
+          {/* Network Printer Toggle */}
+          <View style={[styles.fullCard, { backgroundColor: theme.surface }]}>
+            <View style={styles.fullSwitchRow}>
+              <View style={styles.fullSwitchLeft}>
+                <Ionicons name="print" size={24} color={theme.primary} />
+                <Text style={[styles.fullSwitchLabel, { color: theme.text }]}>Network Printer</Text>
+              </View>
+              <Switch
+                value={printerEnabled}
+                onValueChange={(val) => {
+                  setPrinterEnabled(val);
+                }}
+                trackColor={{ false: theme.inactive, true: theme.success }}
+                thumbColor="#fff"
+                disabled={saving}
+              />
+            </View>
+
+            {printerEnabled && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Printer IP Address</Text>
+                <TextInput
+                  style={[styles.fullInput, {
+                    backgroundColor: theme.background,
+                    color: theme.text,
+                    borderColor: theme.border
+                  }]}
+                  value={printerIP}
+                  onChangeText={setPrinterIP}
+                  placeholder="e.g. 192.168.0.241"
+                  placeholderTextColor={theme.textSecondary}
+                  keyboardType="numeric"
+                  editable={!saving}
+                />
+
+                <Text style={[styles.fullLabel, { color: theme.textSecondary }]}>Printer Port</Text>
+                <TextInput
+                  style={[styles.fullInput, {
+                    backgroundColor: theme.background,
+                    color: theme.text,
+                    borderColor: theme.border
+                  }]}
+                  value={printerPort}
+                  onChangeText={setPrinterPort}
+                  placeholder="e.g. 9100"
+                  placeholderTextColor={theme.textSecondary}
+                  keyboardType="numeric"
+                  editable={!saving}
+                />
+
+                <TouchableOpacity
+                  style={[styles.testPrinterBtn, { backgroundColor: theme.primary }]}
+                  onPress={testNetworkPrinter}
+                  disabled={testingPrinter || saving}
+                >
+                  {testingPrinter ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={{ color: '#fff', fontWeight: '600' }}>Test Connection</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
 
           {/* Buttons */}
           <View style={styles.fullButtonContainer}>
@@ -812,17 +777,17 @@ const testNetworkPrinter = async () => {
             >
               <Text style={[styles.fullCancelText, { color: theme.text }]}>Cancel</Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               style={[styles.fullSaveBtn, { backgroundColor: theme.primary }]}
               onPress={handleSave}
               disabled={saving}
             >
-              {saving ? <ActivityIndicator size="small" color="#fff" /> : 
+              {saving ? <ActivityIndicator size="small" color="#fff" /> :
                 <Text style={[styles.fullSaveText, { color: '#fff' }]}>Save Settings</Text>}
             </TouchableOpacity>
           </View>
-          
+
           <View style={{ height: 30 }} />
         </ScrollView>
       </View>
@@ -1000,31 +965,31 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   // Add these to the styles object
-printerTypeRow: {
-  flexDirection: 'row',
-  gap: 12,
-  marginTop: 8,
-},
-printerTypeBtn: {
-  flex: 1,
-  paddingVertical: 12,
-  borderRadius: 10,
-  alignItems: 'center',
-  borderWidth: 1,
-  borderColor: 'transparent',
-},
-testPrinterBtn: {
-  paddingVertical: 12,
-  borderRadius: 10,
-  alignItems: 'center',
-  marginTop: 10,
-},
-infoBox: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  padding: 12,
-  borderRadius: 10,
-},
+  printerTypeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  printerTypeBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  testPrinterBtn: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+  },
 });
 
 export default CompanySettingsForm;

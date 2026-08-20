@@ -5,6 +5,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import SunmiPrinterService from './SunmiPrinterService';
 import BillPDFGenerator from './BillPDFGenerator';
+import NetworkPrinterService from './NetworkPrinterService';
 
 import { PrinterDetector } from './PrinterDetector';
 // Printer types
@@ -254,6 +255,21 @@ static async smartPrint(
   isReprint: boolean = false
 ): Promise<boolean> {
   try {
+    // ✅ Check if network printer is enabled first
+    const company = await BillPDFGenerator.loadSettings(outletId);
+    if (company.printerEnabled) {
+      console.log('🔌 Network printer enabled, printing receipt...');
+      const text = this.formatThermalTextWithDiscount(saleData, company, discountInfo);
+      const printed = await NetworkPrinterService.printRawText(
+        company.printerIP || '192.168.0.241',
+        company.printerPort || 9100,
+        text
+      );
+      if (printed) {
+        return true;
+      }
+    }
+
     // ✅ Auto-detect printer type
     const printerType = await PrinterDetector.detectPrinter();
     
@@ -282,6 +298,18 @@ private static async printThermalReceipt(
   discountInfo?: DiscountInfo
 ): Promise<boolean> {
   try {
+    const company = await BillPDFGenerator.loadSettings(userId);
+
+    if (company.printerEnabled) {
+      console.log('🔌 Network printer enabled, printing thermal receipt...');
+      const text = this.formatThermalTextWithDiscount(saleData, company, discountInfo);
+      return await NetworkPrinterService.printRawText(
+        company.printerIP || '192.168.0.241',
+        company.printerPort || 9100,
+        text
+      );
+    }
+
     // ✅ STEP 1: Try Sunmi direct print (NO preview)
     const sunmiReady = await SunmiPrinterService.init();
     if (sunmiReady) {
@@ -450,12 +478,6 @@ private static async printLaser(saleData: any, userId?: string | number, printer
   // ==================== SALES REPORT THERMAL PRINT ====================
 static async printSalesReportThermal(reportData: any, userId?: string | number, t?: any): Promise<boolean> {
     try {
-        const sunmiReady = await SunmiPrinterService.init();
-        if (!sunmiReady) {
-            console.log('Sunmi printer not available, using PDF fallback');
-            return false;
-        }
-        
         const company = await BillPDFGenerator.loadSettings(userId);
         const symbol = company.currencySymbol || '$';
         
@@ -595,9 +617,22 @@ static async printSalesReportThermal(reportData: any, userId?: string | number, 
         text += this.centerText('SMARTRETAIL BY UNIPROSG', 32) + '\n';
         text += '\n\n';
         
+        if (company.printerEnabled) {
+            console.log('🔌 Network printer enabled, printing sales report...');
+            return await NetworkPrinterService.printRawText(
+                company.printerIP || '192.168.0.241',
+                company.printerPort || 9100,
+                text
+            );
+        }
+
+        const sunmiReady = await SunmiPrinterService.init();
+        if (!sunmiReady) {
+            console.log('Sunmi printer not available, using PDF fallback');
+            return false;
+        }
         await SunmiPrinterService.printRawText(text);
         await SunmiPrinterService.cutPaper();
-        
         return true;
         
     } catch (error) {
@@ -617,11 +652,6 @@ static async printCategoryReportThermal(
     options?: any
 ): Promise<boolean> {
     try {
-        const sunmiReady = await SunmiPrinterService.init();
-        if (!sunmiReady) {
-            return false;
-        }
-        
         const company = await BillPDFGenerator.loadSettings(userId);
         const symbol = company.currencySymbol || '$';
         const summary = options?.summary || {};
@@ -753,6 +783,19 @@ static async printCategoryReportThermal(
         text += '='.repeat(32) + '\n\n';
         text += this.centerText('SMARTRETAIL BY UNIPROSG', 32) + '\n';
         
+        if (company.printerEnabled) {
+            console.log('🔌 Network printer enabled, printing category report...');
+            return await NetworkPrinterService.printRawText(
+                company.printerIP || '192.168.0.241',
+                company.printerPort || 9100,
+                text
+            );
+        }
+
+        const sunmiReady = await SunmiPrinterService.init();
+        if (!sunmiReady) {
+            return false;
+        }
         await SunmiPrinterService.printRawText(text);
         await SunmiPrinterService.cutPaper();
         
@@ -775,11 +818,6 @@ static async printCategoryReportThermal(
       userId?: string | number
   ): Promise<boolean> {
       try {
-          const sunmiReady = await SunmiPrinterService.init();
-          if (!sunmiReady) {
-              return false;
-          }
-
           const company = await BillPDFGenerator.loadSettings(userId);
           const symbol = company.currencySymbol || '$';
 
@@ -866,6 +904,20 @@ static async printCategoryReportThermal(
           text += '='.repeat(32) + '\n\n';
           text += this.centerText('SMARTRETAIL BY UNIPROSG', 32) + '\n';
           text += '\n\n';
+
+          if (company.printerEnabled) {
+              console.log('🔌 Network printer enabled, printing settlement report...');
+              return await NetworkPrinterService.printRawText(
+                  company.printerIP || '192.168.0.241',
+                  company.printerPort || 9100,
+                  text
+              );
+          }
+
+          const sunmiReady = await SunmiPrinterService.init();
+          if (!sunmiReady) {
+              return false;
+          }
 
           await SunmiPrinterService.printRawText(text);
           await SunmiPrinterService.cutPaper();

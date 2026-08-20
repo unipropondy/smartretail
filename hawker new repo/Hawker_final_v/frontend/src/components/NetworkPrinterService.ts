@@ -1,76 +1,98 @@
-// components/NetworkPrinterService.ts - HTTP Version (Works in Expo)
+// components/NetworkPrinterService.ts - TCP Socket Version (Works in Expo with react-native-tcp-socket)
+import TcpSocket from 'react-native-tcp-socket';
+
 class NetworkPrinterService {
   
   static async testConnection(ip: string, port: number): Promise<boolean> {
-    try {
-      console.log(`🔍 Testing printer at ${ip}:${port}`);
+    return new Promise((resolve) => {
+      let resolved = false;
+      const targetPort = port || 9100;
+      const targetIp = ip.trim();
       
-      // Simple HTTP POST request
-      const response = await fetch(`http://${ip}:${port}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: 'Test Print\n'
-      }).catch(() => null);
+      console.log(`🔍 Testing printer TCP connection at ${targetIp}:${targetPort}`);
       
-      if (response) {
-        console.log('✅ Printer responded');
-        return true;
-      }
+      const client = TcpSocket.createConnection(
+        { port: targetPort, host: targetIp, localAddress: '0.0.0.0', reuseAddress: true },
+        () => {
+          console.log('✅ Connected to printer successfully for test');
+          resolved = true;
+          // Send simple carriage return to test write
+          client.write('\r\n');
+          client.destroy();
+          resolve(true);
+        }
+      );
       
-      console.log('❌ No response from printer');
-      return false;
-      
-    } catch (error) {
-      console.log('❌ Test error:', error);
-      return false;
-    }
-  }
-  
-  static async print(ip: string, port: number, receiptData: any): Promise<boolean> {
-    try {
-      console.log(`🖨️ Sending print to ${ip}:${port}`);
-      
-      // Build simple text receipt
-      let text = '';
-      text += '='.repeat(32) + '\n';
-      text += `${receiptData.shopName || 'YOUR SHOP'}\n`;
-      text += '='.repeat(32) + '\n';
-      text += `INVOICE: ${receiptData.invoiceNumber || 'N/A'}\n`;
-      text += `DATE: ${new Date().toLocaleString()}\n`;
-      text += '-'.repeat(32) + '\n';
-      
-      for (const item of receiptData.items || []) {
-        text += `${item.name} x${item.quantity} = $${(item.price * item.quantity).toFixed(2)}\n`;
-      }
-      
-      text += '-'.repeat(32) + '\n';
-      text += `TOTAL: $${receiptData.total.toFixed(2)}\n`;
-      text += '='.repeat(32) + '\n';
-      text += 'THANK YOU!\n';
-      text += 'COME AGAIN!\n\n';
-      
-      // Send via HTTP POST
-      const response = await fetch(`http://${ip}:${port}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: text
+      client.on('error', (error) => {
+        console.log('❌ Printer connection error:', error);
+        if (!resolved) {
+          resolved = true;
+          client.destroy();
+          resolve(false);
+        }
       });
       
-      if (response) {
-        console.log('✅ Print sent successfully');
-        return true;
-      }
+      // 3 second timeout for liveness check
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          console.log('❌ Printer connection timeout');
+          client.destroy();
+          resolve(false);
+        }
+      }, 3000);
+    });
+  }
+  
+  static async printRawText(ip: string, port: number, text: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const targetPort = port || 9100;
+      const targetIp = ip.trim();
       
-      return false;
+      console.log(`🖨️ Sending TCP print to ${targetIp}:${targetPort}`);
       
-    } catch (error) {
-      console.log('❌ Print error:', error);
-      return false;
-    }
+      const client = TcpSocket.createConnection(
+        { port: targetPort, host: targetIp, localAddress: '0.0.0.0', reuseAddress: true },
+        () => {
+          console.log('✅ Connected to printer for printing');
+          resolved = true;
+          
+          // ESC/POS Commands:
+          // ESC @ (Initialize printer): 0x1B 0x40
+          // GS V 66 0 (Cut paper): 0x1D 0x56 0x42 0x00
+          const initCmd = '\x1B\x40';
+          const cutCmd = '\x1D\x56\x42\x00';
+          
+          client.write(initCmd + text + '\n\n\n\n' + cutCmd);
+          
+          // Small delay before closing socket to ensure all buffers flush
+          setTimeout(() => {
+            client.destroy();
+            resolve(true);
+          }, 500);
+        }
+      );
+      
+      client.on('error', (error) => {
+        console.log('❌ Printer print error:', error);
+        if (!resolved) {
+          resolved = true;
+          client.destroy();
+          resolve(false);
+        }
+      });
+      
+      // 5 second timeout for print job
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          console.log('❌ Printer print timeout');
+          client.destroy();
+          resolve(false);
+        }
+      }, 5000);
+    });
   }
 }
 

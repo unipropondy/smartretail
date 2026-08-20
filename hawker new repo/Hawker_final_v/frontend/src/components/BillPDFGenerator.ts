@@ -20,6 +20,10 @@ interface CompanySettings {
   halalLogo?: string;          // ✅ ADD THIS
   showCompanyLogo?: boolean;   // ✅ ADD THIS
   showHalalLogo?: boolean; 
+  printerType?: 'network' | 'sunmi';
+  printerIP?: string;
+  printerPort?: number;
+  printerEnabled?: boolean;
 }
 
 // ✅ DISCOUNT INFO INTERFACE
@@ -91,6 +95,10 @@ static async loadSettings(userId?: string | number): Promise<CompanySettings> {
                 halalLogo: settings.HalalLogoUrl || '',
                 showCompanyLogo: showCompanyLogo,
                 showHalalLogo: showHalalLogo,
+                printerType: settings.PrinterType || 'network',
+                printerIP: settings.PrinterIP || '192.168.0.241',
+                printerPort: settings.PrinterPort || 9100,
+                printerEnabled: settings.PrinterEnabled === 1 || settings.PrinterEnabled === true,
             };
         }
         return this.getDefaultSettings();
@@ -142,7 +150,11 @@ static async loadSettings(userId?: string | number): Promise<CompanySettings> {
             CompanyLogoUrl: settings.companyLogo || '',
             HalalLogoUrl: settings.halalLogo || '',
             ShowCompanyLogo: settings.showCompanyLogo ? 1 : 0,  // ✅ Simplified
-            ShowHalalLogo: settings.showHalalLogo ? 1 : 0      // ✅ Simplified
+            ShowHalalLogo: settings.showHalalLogo ? 1 : 0,      // ✅ Simplified
+            PrinterType: settings.printerType || 'network',
+            PrinterIP: settings.printerIP || '192.168.0.241',
+            PrinterPort: settings.printerPort || 9100,
+            PrinterEnabled: settings.printerEnabled ? 1 : 0
         };
         
         // ✅ Add timestamp to prevent caching

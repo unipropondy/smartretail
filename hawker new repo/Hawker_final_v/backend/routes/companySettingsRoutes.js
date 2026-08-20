@@ -250,7 +250,7 @@ router.post('/:targetId', async (req, res) => {
                     @outletId, @companyName, @address, @gstNo, @gstPercentage,
                     @phone, @email, @cashierName, @currency, @currencySymbol,
                     @companyLogoUrl, @halalLogoUrl, @showCompanyLogo, @showHalalLogo,
-            PrinterType, PrinterIP, PrinterPort, PrinterEnabled
+            @printerType, @printerIP, @printerPort, @printerEnabled
                 )
             `);
         
