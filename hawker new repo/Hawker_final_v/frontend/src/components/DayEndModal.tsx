@@ -321,61 +321,67 @@ const loadSavedEmail = async () => {
         return leftText + rightText;
     };
 
-  const buildDayEndReportText = (data: any, outletName: string) => {
+  const buildDayEndReportText = (data: any, outletName: string, width: number = 32) => {
     const symbol = '$';
-    const line = '='.repeat(32);
-    const dash = '-'.repeat(32);
+    const line = '='.repeat(width);
+    const dash = '-'.repeat(width);
     
-    // ✅ ORIGINAL Day End Date - USE data.closingDate
-    const originalDate = data.closingDate ? new Date(data.closingDate) : new Date();
-    const origDay = String(originalDate.getUTCDate()).padStart(2, '0');
-    const origMonth = String(originalDate.getUTCMonth() + 1).padStart(2, '0');
-    const origYear = originalDate.getUTCFullYear();
-    const origHours = String(originalDate.getUTCHours()).padStart(2, '0');
-    const origMinutes = String(originalDate.getUTCMinutes()).padStart(2, '0');
-    const origDateStr = `${origDay}/${origMonth}/${origYear} ${origHours}:${origMinutes}`;
+    const getReportDateStr = (rawDate: any): string => {
+      if (rawDate && typeof rawDate === 'string') {
+        const d = new Date(rawDate);
+        const day = String(d.getUTCDate()).padStart(2, '0');
+        const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const year = d.getUTCFullYear();
+        const hours = String(d.getUTCHours()).padStart(2, '0');
+        const minutes = String(d.getUTCMinutes()).padStart(2, '0');
+        return `${day}/${month}/${year} ${hours}:${minutes}`;
+      }
+      const d = rawDate ? new Date(rawDate) : new Date();
+      const utcTime = d.getTime() + (d.getTimezoneOffset() * 60 * 1000);
+      const sgTime = new Date(utcTime + (8 * 60 * 60 * 1000));
+      const day = String(sgTime.getDate()).padStart(2, '0');
+      const month = String(sgTime.getMonth() + 1).padStart(2, '0');
+      const year = sgTime.getFullYear();
+      const hours = String(sgTime.getHours()).padStart(2, '0');
+      const minutes = String(sgTime.getMinutes()).padStart(2, '0');
+      return `${day}/${month}/${year} ${hours}:${minutes}`;
+    };
     
-    // ✅ CURRENT Date (Generated on)
-    const now = new Date();
-    const nowDay = String(now.getDate()).padStart(2, '0');
-    const nowMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const nowYear = now.getFullYear();
-    const nowHours = String(now.getHours()).padStart(2, '0');
-    const nowMinutes = String(now.getMinutes()).padStart(2, '0');
-    const nowDateStr = `${nowDay}/${nowMonth}/${nowYear} ${nowHours}:${nowMinutes}`;
+    const origDateStr = getReportDateStr(data.closingDate);
+    const nowDateStr = getReportDateStr(new Date());
     
     console.log('📅 buildDayEndReportText - Original:', origDateStr);
     console.log('📅 buildDayEndReportText - Generated:', nowDateStr);
     
     let text = '\n\n';
     text += line + '\n';
-    text += centerText('DAY END REPORT', 32) + '\n';
+    text += centerText('DAY END REPORT', width) + '\n';
     text += line + '\n';
     
     text += `Outlet: ${outletName}\n`;
     text += `Date: ${origDateStr}\n`;  // ✅ Original Day End
     text += dash + '\n\n';
     
-    text += centerText('SUMMARY', 32) + '\n';
+    text += centerText('SUMMARY', width) + '\n';
     text += dash + '\n';
-    text += twoColumns('Total Sales:', `${symbol}${(data.totalSales || 0).toFixed(2)}`, 32) + '\n';
-    text += twoColumns('Total Discount:', `-${symbol}${(data.totalDiscount || 0).toFixed(2)}`, 32) + '\n';
-    text += twoColumns('Net Sales:', `${symbol}${(data.netSales || 0).toFixed(2)}`, 32) + '\n';
-    text += twoColumns('Total Items:', `${data.totalItems || 0}`, 32) + '\n';
-    text += twoColumns('Transactions:', `${data.salesCount || 0}`, 32) + '\n';
+    text += twoColumns('Total Sales:', `${symbol}${(data.totalSales || 0).toFixed(2)}`, width) + '\n';
+    text += twoColumns('Total Discount:', `-${symbol}${(data.totalDiscount || 0).toFixed(2)}`, width) + '\n';
+    text += twoColumns('Net Sales:', `${symbol}${(data.netSales || 0).toFixed(2)}`, width) + '\n';
+    text += twoColumns('Total Items:', `${data.totalItems || 0}`, width) + '\n';
+    text += twoColumns('Transactions:', `${data.salesCount || 0}`, width) + '\n';
     text += dash + '\n\n';
     
-    text += centerText('PAYMENT BREAKDOWN', 32) + '\n';
+    text += centerText('PAYMENT BREAKDOWN', width) + '\n';
     text += dash + '\n';
     if (data.paymentBreakdown) {
         Object.entries(data.paymentBreakdown).forEach(([method, amount]) => {
-            text += twoColumns(method, `${symbol}${(amount as number).toFixed(2)}`, 32) + '\n';
+            text += twoColumns(method, `${symbol}${(amount as number).toFixed(2)}`, width) + '\n';
         });
     }
     text += dash + '\n\n';
     
     if (data.categories && data.categories.length > 0) {
-        text += centerText('CATEGORY BREAKDOWN', 32) + '\n';
+        text += centerText('CATEGORY BREAKDOWN', width) + '\n';
         text += dash + '\n';
         data.categories.forEach((cat: any) => {
             text += `${cat.name}: ${symbol}${(cat.totalRevenue || 0).toFixed(2)} (${cat.totalQuantity || 0} items)\n`;
@@ -389,10 +395,10 @@ const loadSavedEmail = async () => {
         text += dash + '\n\n';
     }
     
-    text += centerText('END OF REPORT', 32) + '\n';
+    text += centerText('END OF REPORT', width) + '\n';
     text += line + '\n';
-    text += centerText('SMARTRETAIL BY UNIPROSG', 32) + '\n';
-    text += centerText(`Generated: ${nowDateStr}`, 32) + '\n';  // ✅ Current Time
+    text += centerText('SMARTRETAIL BY UNIPROSG', width) + '\n';
+    text += centerText(`Generated: ${nowDateStr}`, width) + '\n';  // ✅ Current Time
     text += '\n\n\n';
     
     return text;
@@ -400,23 +406,29 @@ const loadSavedEmail = async () => {
 const generateDayEndHTML = (data: any, outletName: string) => {
     const symbol = '$';
     
-    // ✅ ORIGINAL Day End Date - USE UTC (store panni irukkara time)
-    const originalDate = data.closingDate ? new Date(data.closingDate) : new Date();
-    const origDay = String(originalDate.getUTCDate()).padStart(2, '0');
-    const origMonth = String(originalDate.getUTCMonth() + 1).padStart(2, '0');
-    const origYear = originalDate.getUTCFullYear();
-    const origHours = String(originalDate.getUTCHours()).padStart(2, '0');
-    const origMinutes = String(originalDate.getUTCMinutes()).padStart(2, '0');
-    const origDateStr = `${origDay}/${origMonth}/${origYear} ${origHours}:${origMinutes}`;
+    const getReportDateStr = (rawDate: any): string => {
+      if (rawDate && typeof rawDate === 'string') {
+        const d = new Date(rawDate);
+        const day = String(d.getUTCDate()).padStart(2, '0');
+        const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const year = d.getUTCFullYear();
+        const hours = String(d.getUTCHours()).padStart(2, '0');
+        const minutes = String(d.getUTCMinutes()).padStart(2, '0');
+        return `${day}/${month}/${year} ${hours}:${minutes}`;
+      }
+      const d = rawDate ? new Date(rawDate) : new Date();
+      const utcTime = d.getTime() + (d.getTimezoneOffset() * 60 * 1000);
+      const sgTime = new Date(utcTime + (8 * 60 * 60 * 1000));
+      const day = String(sgTime.getDate()).padStart(2, '0');
+      const month = String(sgTime.getMonth() + 1).padStart(2, '0');
+      const year = sgTime.getFullYear();
+      const hours = String(sgTime.getHours()).padStart(2, '0');
+      const minutes = String(sgTime.getMinutes()).padStart(2, '0');
+      return `${day}/${month}/${year} ${hours}:${minutes}`;
+    };
     
-    // ✅ CURRENT Date - USE LOCAL TIME (for "Generated on")
-    const now = new Date();
-    const nowDay = String(now.getDate()).padStart(2, '0');
-    const nowMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const nowYear = now.getFullYear();
-    const nowHours = String(now.getHours()).padStart(2, '0');
-    const nowMinutes = String(now.getMinutes()).padStart(2, '0');
-    const nowDateStr = `${nowDay}/${nowMonth}/${nowYear} ${nowHours}:${nowMinutes}`;
+    const origDateStr = getReportDateStr(data.closingDate);
+    const nowDateStr = getReportDateStr(new Date());
     
     console.log('📅 Original (UTC):', origDateStr);
     console.log('📅 Current (Local):', nowDateStr);
@@ -526,42 +538,41 @@ const printDayEndReport = async (dayEndData: any) => {
         
         console.log('📅 Report closingDate:', reportData.closingDate);
         
-        const reportText = buildDayEndReportText(reportData, outletName);
-        
         // Check network printer
         const company = await BillPDFGenerator.loadSettings();
+        let printedOnNetwork = false;
         if (company.printerEnabled) {
             console.log('🔌 Network printer enabled, printing Day End Report...');
-            const printed = await NetworkPrinterService.printRawText(
+            const reportTextNetwork = buildDayEndReportText(reportData, outletName, 48);
+            printedOnNetwork = await NetworkPrinterService.printRawText(
                 company.printerIP || '192.168.0.241',
                 company.printerPort || 9100,
-                reportText
+                reportTextNetwork
             );
-            if (printed) {
+            if (printedOnNetwork) {
                 console.log('✅ Day End Report printed on Network Printer');
-                return;
             }
         }
         
+        let printedOnSunmi = false;
         const sunmiReady = await SunmiPrinterService.init();
         if (sunmiReady) {
-            await SunmiPrinterService.printRawText(reportText);
+            const reportTextSunmi = buildDayEndReportText(reportData, outletName, 32);
+            await SunmiPrinterService.printRawText(reportTextSunmi);
             await SunmiPrinterService.cutPaper();
             console.log('✅ Day End Report printed on Sunmi');
-            // ✅ Toast instead of Alert
-            
-            return;
+            printedOnSunmi = true;
         }
         
-        console.log('⚠️ Sunmi not available, saving as PDF');
-        const html = generateDayEndHTML(reportData, outletName);
-        const { uri } = await Print.printToFileAsync({ html });
-        await Sharing.shareAsync(uri);
-        
+        if (!printedOnNetwork && !printedOnSunmi) {
+            console.log('⚠️ No printer available, saving as PDF');
+            const html = generateDayEndHTML(reportData, outletName);
+            const { uri } = await Print.printToFileAsync({ html });
+            await Sharing.shareAsync(uri);
+        }
         
     } catch (error) {
         console.log('❌ Print error:', error);
-       
     }
 };
     // ==================== REPRINT FUNCTION ====================
@@ -581,44 +592,52 @@ const printDayEndReport = async (dayEndData: any) => {
             salesCount: item.salesCount || 0,  // ✅ FIX: Transactions
             paymentBreakdown: item.paymentBreakdown || {},
             categories: item.categories || [],
-            closingDate: item.closingDate  // ✅ FIX: Original day end date
+            closingDate: item.createdAt || item.closingDate  // ✅ FIX: Original day end date/time
         };
-        
-        const reprintText = '='.repeat(32) + '\n' +
-                           centerText('REPRINT', 32) + '\n' +
-                           '='.repeat(32) + '\n\n' +
-                           reportText;
         
         // Check network printer
         const company = await BillPDFGenerator.loadSettings();
+        let printedOnNetwork = false;
         if (company.printerEnabled) {
             console.log('🔌 Network printer enabled, reprinting Day End Report...');
-            const printed = await NetworkPrinterService.printRawText(
+            const reportTextNetwork = buildDayEndReportText(reportData, outletName, 48);
+            const reprintTextNetwork = '='.repeat(48) + '\n' +
+                               centerText('REPRINT', 48) + '\n' +
+                               '='.repeat(48) + '\n\n' +
+                               reportTextNetwork;
+            printedOnNetwork = await NetworkPrinterService.printRawText(
                 company.printerIP || '192.168.0.241',
                 company.printerPort || 9100,
-                reprintText
+                reprintTextNetwork
             );
-            if (printed) {
+            if (printedOnNetwork) {
                 console.log('✅ Day End Report reprinted on Network Printer');
-                Alert.alert('🖨️ Success', 'Report reprinted successfully!');
-                return;
             }
         }
         
+        let printedOnSunmi = false;
         const sunmiReady = await SunmiPrinterService.init();
         if (sunmiReady) {
-            await SunmiPrinterService.printRawText(reprintText);
+            const reportTextSunmi = buildDayEndReportText(reportData, outletName, 32);
+            const reprintTextSunmi = '='.repeat(32) + '\n' +
+                               centerText('REPRINT', 32) + '\n' +
+                               '='.repeat(32) + '\n\n' +
+                               reportTextSunmi;
+            await SunmiPrinterService.printRawText(reprintTextSunmi);
             await SunmiPrinterService.cutPaper();
             console.log('✅ Day End Report reprinted on Sunmi');
-            Alert.alert('🖨️ Success', 'Report reprinted successfully!');
-            return;
+            printedOnSunmi = true;
         }
         
-        console.log('⚠️ Sunmi not available, saving as PDF');
-        const html = generateDayEndHTML(reportData, outletName);
-        const { uri } = await Print.printToFileAsync({ html });
-        await Sharing.shareAsync(uri);
-        Alert.alert('📄 PDF Saved', 'Report saved as PDF');
+        if (printedOnNetwork || printedOnSunmi) {
+            Alert.alert('🖨️ Success', 'Report reprinted successfully!');
+        } else {
+            console.log('⚠️ No printer available, saving as PDF');
+            const html = generateDayEndHTML(reportData, outletName);
+            const { uri } = await Print.printToFileAsync({ html });
+            await Sharing.shareAsync(uri);
+            Alert.alert('📄 PDF Saved', 'Report saved as PDF');
+        }
         
     } catch (error) {
         console.log('❌ Reprint error:', error);

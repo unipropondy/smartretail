@@ -246,8 +246,16 @@ const transaction = pool.transaction();
                     categories: categoriesArray,
                     salesCount: sales.length,
                     startDate: sales[0]?.SaleDate,
-                    endDate: new Date(),  // Current time
-                    closingDate: new Date()  // Current time
+                    endDate: (() => {
+                        const d = new Date();
+                        const utc = d.getTime() + (d.getTimezoneOffset() * 60 * 1000);
+                        return new Date(utc + (8 * 60 * 60 * 1000));
+                    })(),
+                    closingDate: (() => {
+                        const d = new Date();
+                        const utc = d.getTime() + (d.getTimezoneOffset() * 60 * 1000);
+                        return new Date(utc + (8 * 60 * 60 * 1000));
+                    })()
                 }
             });
             

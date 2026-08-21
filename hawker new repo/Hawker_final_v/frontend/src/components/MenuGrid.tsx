@@ -103,7 +103,7 @@ export const MenuGrid: React.FC<MenuGridProps> = ({
     if (!selectedItem) return;
     
     const price = parseFloat(customPrice);
-    if (isNaN(price) || price <= 0) {
+    if (isNaN(price) || price < 0) {
       Alert.alert(
         t.error || 'Error',
         t.enterValidPrice || 'Please enter a valid price'
@@ -346,19 +346,10 @@ onPress={() => {
     </Text>
   </View>
 ) : (
-  // Normal items - show price only if > 0
-  item.price > 0 ? (
-    <Text style={[styles.menuItemPrice, { color: theme.primary }]}>
-      {formatPrice(item.price)} 
-    </Text>
-  ) : (
-    // Fallback for any 0 price items that aren't open price
-    <View style={styles.openPriceContainer}>
-      <Text style={[styles.openPriceTag, { color: theme.warning }]}>
-        {t?.enterPrice || 'Enter price'}
-      </Text>
-    </View>
-  )
+  // Normal items - always show price (including $0.00)
+  <Text style={[styles.menuItemPrice, { color: theme.primary }]}>
+    {formatPrice(item.price)} 
+  </Text>
 )}
               </TouchableOpacity>
             );

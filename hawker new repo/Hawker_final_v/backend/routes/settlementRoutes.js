@@ -24,12 +24,13 @@ router.get('/check', authenticateToken, async (req, res) => {
     const result = await pool.request()
       .input('outletId', sql.Int, outletId)
       .input('settlementDate', sql.Date, date)
-      .query(`SELECT Id, Status FROM settlement WHERE OutletId = @outletId AND SettlementDate = @settlementDate`);
+      .query(`SELECT * FROM settlement WHERE OutletId = @outletId AND SettlementDate = @settlementDate`);
     
     res.json({ 
       success: true, 
       settled: result.recordset.length > 0 && result.recordset[0]?.Status === 'COMPLETED',
-      settlementId: result.recordset[0]?.Id || null
+      settlementId: result.recordset[0]?.Id || null,
+      settlement: result.recordset[0] || null
     });
   } catch (err) {
     console.error('Check error:', err);

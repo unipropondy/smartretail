@@ -2056,7 +2056,7 @@ export default function PosScreen() {
 
     if (isOpenPriceItem) {
       // Validate custom price for open price items
-      if (!customPrice || customPrice <= 0) {
+      if (customPrice === undefined || customPrice === null || isNaN(customPrice) || customPrice < 0) {
         Alert.alert(
           'Invalid Price',
           'Please enter a valid amount'
@@ -2493,7 +2493,7 @@ export default function PosScreen() {
 
       // Validate cart items
       const invalidItems = cart.filter(item =>
-        !item.id || !item.name || !item.price || item.price <= 0
+        !item.id || !item.name || item.price === undefined || item.price === null || item.price < 0
       );
 
       if (invalidItems.length > 0) {
@@ -2821,7 +2821,8 @@ export default function PosScreen() {
           setPendingSaleData({
             ...saleData,
             id: saleResponse.data.id,
-            invoiceNumber: saleResponse.data.invoiceNumber
+            invoiceNumber: saleResponse.data.invoiceNumber,
+            date: saleResponse.data.date || saleResponse.data.SaleDate || saleResponse.data.saleDate
           });
 
           setPaymentSuccess(true);
@@ -3003,6 +3004,7 @@ export default function PosScreen() {
           ...saleData,
           id: newSale.id,
           invoiceNumber: newSale.invoiceNumber,
+          date: newSale.date || response.data.date || response.data.SaleDate || response.data.saleDate,
           discount: {
             type: discountInfo.type,
             value: discountInfo.value,
@@ -3097,7 +3099,7 @@ export default function PosScreen() {
         id: response.data.id,
         total: response.data.total,
         paymentMethod: response.data.paymentMethod,
-        date: response.data.date,
+        date: response.data.date || response.data.SaleDate || response.data.saleDate || new Date(),
         invoiceNumber: response.data.invoiceNumber,
         items: response.data.items
       };
@@ -3110,7 +3112,12 @@ export default function PosScreen() {
         setShowPaymentModal(false);
         setProcessingPayment(false);
         setSelectedPayment(null);
-        setPendingSaleData(saleData);
+        setPendingSaleData({
+          ...saleData,
+          id: newSale.id,
+          invoiceNumber: newSale.invoiceNumber,
+          date: newSale.date
+        });
         setShowBillPrompt(true);
         setCart([]);
         setDiscountInfo({
@@ -3182,6 +3189,7 @@ export default function PosScreen() {
         id: response.data.id,
         outletId: outletId,
         invoiceNumber: response.data.invoiceNumber,
+        date: response.data.date || response.data.SaleDate || response.data.saleDate,
         discount: {
           type: discountInfo.type,
           value: discountInfo.value,
@@ -3266,6 +3274,7 @@ export default function PosScreen() {
         id: response.data.id,
         outletId: outletId,
         invoiceNumber: response.data.invoiceNumber,
+        date: response.data.date || response.data.SaleDate || response.data.saleDate,
         discount: {
           type: discountInfo.type,
           value: discountInfo.value,
@@ -3509,6 +3518,7 @@ export default function PosScreen() {
         userId: user?.id,
         outletId: outletId,
         invoiceNumber: newSale.invoiceNumber,
+        date: newSale.date || response.data.date || response.data.SaleDate || response.data.saleDate,
         discount: {
           type: discountInfo.type,
           value: discountInfo.value,
@@ -3570,7 +3580,7 @@ export default function PosScreen() {
         {currentLayer === 'item' && selectedCategory && (
           <>
             <Text style={[styles.layerTitle, { color: currentTheme.text }]}>{selectedCategory}</Text>
-            <Text style={[styles.layerSubtitle, { color: currentTheme.textSecondary }]}>Select Item</Text>
+            <Text style={[styles.layerSubtitle, { color: currentTheme.textSecondary }]}></Text>
           </>
         )}
       </View>
@@ -4165,7 +4175,7 @@ export default function PosScreen() {
     if (!priceModal.item) return;
 
     const price = parseFloat(priceModal.price);
-    if (isNaN(price) || price <= 0) {
+    if (isNaN(price) || price < 0) {
       Alert.alert('Error', 'Please enter valid price');
       return;
     }
@@ -8131,8 +8141,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
 
-    left: 15,
-    right: 0,
+    left: 12,
+    right: 5,
 
 
   },

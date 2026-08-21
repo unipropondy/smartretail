@@ -38,11 +38,11 @@ class BillPDFGenerator {
   
 static async loadSettings(userId?: string | number): Promise<CompanySettings> {
     try {
-        if (!userId) return this.getDefaultSettings();
-        
         // Get outlet ID for multi-outlet
         const outletId = await AsyncStorage.getItem('selectedOutletId');
         const targetId = outletId || userId;
+        
+        if (!targetId) return this.getDefaultSettings();
         
         // Add timestamp to prevent caching
         const timestamp = Date.now();
@@ -247,10 +247,24 @@ private static escapeHtml(str: string): string {
         };
         console.log('📋 Using discount from saleData fields:', finalDiscountInfo);
     }
+    const rawDateVal = saleData.originalDate || saleData.date || saleData.SaleDate || saleData.saleDate;
+    let formattedDateStr = '';
+    if (rawDateVal) {
+      try {
+        const dateStr = typeof rawDateVal === 'string' ? rawDateVal : new Date(rawDateVal).toISOString();
+        const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (match) {
+          const [_, year, month, day, hours, minutes] = match;
+          formattedDateStr = `${day}/${month}/${year} ${hours}:${minutes}`;
+        }
+      } catch (e) {}
+    }
+    if (!formattedDateStr) {
+      const d = rawDateVal ? new Date(rawDateVal) : new Date();
+      formattedDateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
     
-    const saleDate = saleData.originalDate ? new Date(saleData.originalDate) : 
-                     saleData.date ? new Date(saleData.date) : 
-                     new Date();
+    const saleDate = rawDateVal ? new Date(rawDateVal) : new Date();
     
     const isReprint = saleData.isReprint === true;
     const billNo = saleData.invoiceNumber || `INV-${saleDate.getFullYear()}${(saleDate.getMonth()+1).toString().padStart(2,'0')}${saleDate.getDate().toString().padStart(2,'0')}-${Math.floor(1000 + Math.random()*9000)}`;
@@ -514,7 +528,7 @@ private static escapeHtml(str: string): string {
             <!-- ✅ ORIGINAL SALE DATE -->
             <div class="detail-row">
               <span class="detail-label">DATE:</span>
-              <span class="detail-value">${saleDate.toLocaleDateString()} ${saleDate.toLocaleTimeString()}</span>
+              <span class="detail-value">${formattedDateStr}</span>
             </div>
             
             

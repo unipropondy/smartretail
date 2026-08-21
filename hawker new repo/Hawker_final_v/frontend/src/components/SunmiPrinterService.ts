@@ -231,14 +231,30 @@ static async cutPaper(): Promise<boolean> {
       await lineWrap(1);
       
       // ============ BILL DETAILS ============
-      // ✅✅✅ FIXED: Date Format - DD/MM/YYYY ✅✅✅
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const year = now.getFullYear();
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const dateStr = `${day}/${month}/${year} ${hours}:${minutes}`;
+      const rawDateVal = saleData.originalDate || saleData.date || saleData.SaleDate || saleData.saleDate;
+      let dateStr = '';
+      if (rawDateVal) {
+        try {
+          const dateString = typeof rawDateVal === 'string' ? rawDateVal : new Date(rawDateVal).toISOString();
+          const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+          if (match) {
+            const [_, year, month, day, hours, minutes] = match;
+            dateStr = `${day}/${month}/${year} ${hours}:${minutes}`;
+          }
+        } catch (e) {}
+      }
+      if (!dateStr) {
+        const d = rawDateVal ? new Date(rawDateVal) : new Date();
+        // Ensure we display Singapore time (UTC+8) timezone-neutrally
+        const utcTime = d.getTime() + (d.getTimezoneOffset() * 60 * 1000);
+        const sgTime = new Date(utcTime + (8 * 60 * 60 * 1000));
+        const day = String(sgTime.getDate()).padStart(2, '0');
+        const month = String(sgTime.getMonth() + 1).padStart(2, '0');
+        const year = sgTime.getFullYear();
+        const hours = String(sgTime.getHours()).padStart(2, '0');
+        const minutes = String(sgTime.getMinutes()).padStart(2, '0');
+        dateStr = `${day}/${month}/${year} ${hours}:${minutes}`;
+      }
       
       await this.left(`INVOICE NO: ${saleData.invoiceNumber || saleData.id}`);
       await this.left(`DATE: ${dateStr}`);  // ✅ DD/MM/YYYY

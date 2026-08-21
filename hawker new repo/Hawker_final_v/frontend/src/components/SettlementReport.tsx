@@ -280,6 +280,44 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
           const variance = prev.physicalCash - expectedClosing;
           return { ...prev, cashReceived, expectedClosing, variance };
         });
+
+        // ✅ OVERRIDE WITH SAVED DATABASE VALUES IF SETTLED
+        if (checkRes.data.settled && checkRes.data.settlement) {
+          const s = checkRes.data.settlement;
+          console.log('📝 Overriding report state with actual database saved settlement record:', s);
+          setSummary({
+            totalSales: Number(s.TotalSales) || 0,
+            totalDiscount: Number(s.TotalDiscount) || 0,
+            voidAmount: Number(s.VoidAmount) || 0,
+            netSales: Number(s.NetSales) || 0,
+          });
+          
+          let pb = { cash: 0, card: 0, upi: 0, paynow: 0, valuecard: 0, cdc: 0, other: 0 };
+          if (s.PaymentBreakdownJSON) {
+            try {
+              const parsed = JSON.parse(s.PaymentBreakdownJSON);
+              pb.cash = Number(parsed.cash) || 0;
+              pb.card = Number(parsed.card) || 0;
+              pb.upi = Number(parsed.upi) || 0;
+              pb.paynow = Number(parsed.paynow) || 0;
+              pb.valuecard = Number(parsed.valuecard) || 0;
+              pb.cdc = Number(parsed.cdc) || 0;
+              pb.other = Number(parsed.other) || 0;
+            } catch (e) {
+              console.log('Error parsing payment breakdown JSON:', e);
+            }
+          }
+          setPaymodeBreakdown(pb);
+          
+          setCashFlow({
+            openingCash: Number(s.OpeningCashTotal) || 0,
+            cashReceived: Number(s.CashReceived) || 0,
+            manualCashOutTotal: Number(s.CashOutTotal) || 0,
+            expectedClosing: Number(s.ExpectedClosingCash) || 0,
+            physicalCash: Number(s.PhysicalCashTotal) || 0,
+            variance: Number(s.CashVariance) || 0,
+          });
+        }
         
       } catch (salesError) {
         console.log('❌ Sales load error:', salesError);

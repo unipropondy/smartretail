@@ -5,6 +5,7 @@ export const themes: Record<string, ThemeType> = {
   light: {
     primary: '#FF4444',
     secondary: '#4CAF50',
+    info: '#2196F3',
     background: '#ffffff',
     surface: '#f5f5f5',
     text: '#333333',
@@ -21,6 +22,7 @@ export const themes: Record<string, ThemeType> = {
   night: {
     primary: '#FF6666',
     secondary: '#66BB66',
+    info: '#64B5F6',
     background: '#121212',
     surface: '#1E1E1E',
     text: '#ffffff',
@@ -37,6 +39,7 @@ export const themes: Record<string, ThemeType> = {
   blue: {
     primary: '#2196F3',
     secondary: '#4CAF50',
+    info: '#42A5F5',
     background: '#f5f5f5',
     surface: '#ffffff',
     text: '#333333',
@@ -53,6 +56,7 @@ export const themes: Record<string, ThemeType> = {
   green: {
     primary: '#4CAF50',
     secondary: '#FF4444',
+    info: '#2196F3',
     background: '#f5f5f5',
     surface: '#ffffff',
     text: '#333333',
@@ -69,6 +73,7 @@ export const themes: Record<string, ThemeType> = {
   purple: {
     primary: '#9C27B0',
     secondary: '#FF4444',
+    info: '#2196F3',
     background: '#f5f5f5',
     surface: '#ffffff',
     text: '#333333',

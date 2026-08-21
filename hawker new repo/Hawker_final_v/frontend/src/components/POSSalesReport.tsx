@@ -17,6 +17,8 @@ interface CategorySummary {
   totalCategories: number;
   totalItems: number;
   paymentBreakdown: Record<string, number>;
+  totalDiscount?: number;
+  discountedTransactions?: number;
   totalValueCardAmount?: number;
   valueCardTransactionCount?: number; 
 }
@@ -95,7 +97,7 @@ const POSSalesReport: React.FC<Props> = ({
   const [pickerType, setPickerType] = useState<'start' | 'end' | 'startTime' | 'endTime'>('start');
   const [tempDate, setTempDate] = useState(new Date());
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'categories'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'categories' | 'staff'>('overview');
   const prevTabRef = useRef(activeTab); 
   const [showVoidPasswordSettings, setShowVoidPasswordSettings] = useState(false);
   

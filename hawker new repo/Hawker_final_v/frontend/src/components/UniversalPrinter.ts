@@ -255,31 +255,27 @@ static async smartPrint(
   isReprint: boolean = false
 ): Promise<boolean> {
   try {
-    // ✅ Check if network printer is enabled first
     const company = await BillPDFGenerator.loadSettings(outletId);
+    let printedOnNetwork = false;
     if (company.printerEnabled) {
       console.log('🔌 Network printer enabled, printing receipt...');
-      const text = this.formatThermalTextWithDiscount(saleData, company, discountInfo);
-      const printed = await NetworkPrinterService.printRawText(
+      const text = this.formatThermalTextWithDiscount(saleData, company, discountInfo, 48);
+      printedOnNetwork = await NetworkPrinterService.printRawText(
         company.printerIP || '192.168.0.241',
         company.printerPort || 9100,
         text
       );
-      if (printed) {
-        return true;
-      }
     }
 
-    // ✅ Auto-detect printer type
+    // ✅ Auto-detect printer type and print on Sunmi as well
+    let printedOnSunmi = false;
     const printerType = await PrinterDetector.detectPrinter();
-    
     if (printerType === 'sunmi') {
-      // Sunmi direct print - NO PREVIEW
-      const printed = await this.printThermalReceipt(saleData, outletId, undefined, discountInfo);
-      if (printed) {
-        
-        return true;
-      }
+      printedOnSunmi = await this.printThermalReceipt(saleData, outletId, undefined, discountInfo);
+    }
+    
+    if (printedOnNetwork || printedOnSunmi) {
+      return true;
     }
     
     // ✅ Fallback to PDF
@@ -299,22 +295,22 @@ private static async printThermalReceipt(
 ): Promise<boolean> {
   try {
     const company = await BillPDFGenerator.loadSettings(userId);
+    let printedOnNetwork = false;
 
     if (company.printerEnabled) {
       console.log('🔌 Network printer enabled, printing thermal receipt...');
-      const text = this.formatThermalTextWithDiscount(saleData, company, discountInfo);
-      return await NetworkPrinterService.printRawText(
+      const text = this.formatThermalTextWithDiscount(saleData, company, discountInfo, 48);
+      printedOnNetwork = await NetworkPrinterService.printRawText(
         company.printerIP || '192.168.0.241',
         company.printerPort || 9100,
         text
       );
     }
 
-    // ✅ STEP 1: Try Sunmi direct print (NO preview)
+    // ✅ Try Sunmi direct print (NO preview)
+    let printedOnSunmi = false;
     const sunmiReady = await SunmiPrinterService.init();
     if (sunmiReady) {
-      const company = await BillPDFGenerator.loadSettings(userId);
-      
       // ✅ Pass discount to saleData for Sunmi printer
       const enhancedSaleData = { ...saleData };
       if (discountInfo?.applied && discountInfo.amount > 0) {
@@ -327,12 +323,15 @@ private static async printThermalReceipt(
       const printed = await SunmiPrinterService.printReceipt(enhancedSaleData, company);
       if (printed) {
         console.log('✅ Printed with Sunmi printer - NO PREVIEW');
-        return true;
+        printedOnSunmi = true;
       }
     }
     
+    if (printedOnNetwork || printedOnSunmi) {
+      return true;
+    }
+    
     // ✅ STEP 2: If Sunmi fails, create PDF (no preview)
-    const company = await BillPDFGenerator.loadSettings(userId);
     const html = await BillPDFGenerator.generateHTML(saleData, userId, discountInfo);
     const { uri } = await Print.printToFileAsync({ 
       html, 
@@ -348,47 +347,162 @@ private static async printThermalReceipt(
   }
 }
 
-  private static formatThermalTextWithDiscount(saleData: any, company: any, discountInfo?: DiscountInfo): string {
+  private static formatThermalTextWithDiscount(saleData: any, company: any, discountInfo?: DiscountInfo, width: number = 32): string {
     const symbol = company.currencySymbol || '$';
-    const gstInfo = saleData.gstInfo || { rate: 9, baseAmount: 0, gstAmount: 0, totalAmount: 0, regNo: 'N/A' };
-    const hasDiscount = discountInfo?.applied && discountInfo.amount > 0;
-    const originalTotal = hasDiscount ? saleData.total + discountInfo.amount : saleData.total;
-    const centerText = (text: string, width: number = 32) => { if (!text) return ' '.repeat(width); const padding = Math.max(0, width - text.length); return ' '.repeat(Math.floor(padding/2)) + text + ' '.repeat(padding - Math.floor(padding/2)); };
     
-    let text = '\n' + '='.repeat(32) + '\n';
-    text += centerText(company.name || 'STORE NAME') + '\n';
-    text += '='.repeat(32) + '\n';
-    text += `Bill No: ${saleData.billNumber || saleData.id || Date.now()}\n`;
-    text += `Date: ${new Date().toLocaleString()}\n`;
-    text += `GST Reg: ${gstInfo.regNo}\n`;
-    text += `Cashier: ${saleData.cashier || company.cashierName || 'Staff'}\n`;
+    // Helper alignment functions
+    const center = (text: string) => {
+      if (!text) return ' '.repeat(width);
+      if (text.length >= width) return text.substring(0, width);
+      const padding = Math.floor((width - text.length) / 2);
+      return ' '.repeat(padding) + text;
+    };
+    
+    const twoCols = (left: string, right: string) => {
+      const leftWidth = Math.floor(width * 0.6);
+      const rightWidth = width - leftWidth;
+      let leftStr = left.substring(0, leftWidth).padEnd(leftWidth, ' ');
+      let rightStr = right.substring(0, rightWidth).padStart(rightWidth, ' ');
+      return leftStr + rightStr;
+    };
+    
+    const itemRow = (name: string, qty: string, price: string, total: string) => {
+      const nameW = Math.floor(width * 0.40); 
+      const qtyW = Math.floor(width * 0.10);  
+      const priceW = Math.floor(width * 0.22); 
+      const totalW = width - (nameW + qtyW + priceW + 1); 
+      
+      let line = name.substring(0, nameW).padEnd(nameW, ' ');
+      line += qty.substring(0, qtyW).padStart(qtyW, ' ');
+      line += ' '; 
+      line += price.substring(0, priceW).padStart(priceW, ' ');
+      line += total.substring(0, totalW).padStart(totalW, ' ');
+      return line;
+    };
+
+    let text = '\n' + '='.repeat(width) + '\n';
+    text += center(company.name || 'YOUR STORE') + '\n';
+    
+    if (company.address) {
+      const addressLines = company.address.split('\n');
+      for (const line of addressLines) {
+        if (line.trim()) text += center(line.trim()) + '\n';
+      }
+    }
+    
+    if (company.phone) text += center(`📞 ${company.phone}`) + '\n';
+    if (company.email) text += center(`📧 ${company.email}`) + '\n';
+    if (company.gstNo) text += center(`GST: ${company.gstNo}`) + '\n';
+    
+    text += '='.repeat(width) + '\n';
+    
+    // Bill Details
+    const rawDateVal = saleData.originalDate || saleData.date || saleData.SaleDate || saleData.saleDate;
+    let dateStr = '';
+    if (rawDateVal) {
+      try {
+        const dateString = typeof rawDateVal === 'string' ? rawDateVal : new Date(rawDateVal).toISOString();
+        const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (match) {
+          const [_, year, month, day, hours, minutes] = match;
+          dateStr = `${day}/${month}/${year} ${hours}:${minutes}`;
+        }
+      } catch (e) {}
+    }
+    if (!dateStr) {
+      const d = rawDateVal ? new Date(rawDateVal) : new Date();
+      // Ensure we display Singapore time (UTC+8) timezone-neutrally
+      const utcTime = d.getTime() + (d.getTimezoneOffset() * 60 * 1000);
+      const sgTime = new Date(utcTime + (8 * 60 * 60 * 1000));
+      const day = String(sgTime.getDate()).padStart(2, '0');
+      const month = String(sgTime.getMonth() + 1).padStart(2, '0');
+      const year = sgTime.getFullYear();
+      const hours = String(sgTime.getHours()).padStart(2, '0');
+      const minutes = String(sgTime.getMinutes()).padStart(2, '0');
+      dateStr = `${day}/${month}/${year} ${hours}:${minutes}`;
+    }
+    
+    text += `INVOICE NO: ${saleData.invoiceNumber || saleData.id}\n`;
+    text += `DATE: ${dateStr}\n`;
+    text += `CASHIER: ${saleData.cashier || company.cashierName || 'Staff'}\n`;
     if (saleData.staffName) {
-      text += `Staff: ${saleData.staffName}\n`;
+      text += `STAFF: ${saleData.staffName}\n`;
     }
-    text += '-'.repeat(32) + '\n';
     
-    saleData.items?.forEach((item: any) => {
-      const name = (item.name || 'Item').substring(0, 15).padEnd(15);
-      const qty = (item.quantity || 1).toString().padStart(3);
-      text += `${name} ${qty}  ${symbol}${(item.price * item.quantity).toFixed(2)}\n`;
-      if (item.quantity > 1) text += `  @ ${symbol}${(item.price || 0).toFixed(2)} each\n`;
-    });
+    text += '-'.repeat(width) + '\n';
     
-    text += '-'.repeat(32) + '\n';
-    if (hasDiscount) {
-      text += `ORIGINAL:     ${symbol}${originalTotal.toFixed(2)}\n`;
-      text += `DISCOUNT (${discountInfo?.type === 'percentage' ? `${discountInfo?.value}%` : 'FIXED'}): -${symbol}${discountInfo?.amount.toFixed(2)}\n`;
-      text += '-'.repeat(32) + '\n';
+    // Item Header
+    text += itemRow('ITEM', 'QTY', 'PRICE', 'TOTAL') + '\n';
+    text += '-'.repeat(width) + '\n';
+    
+    // Items
+    for (const item of saleData.items || []) {
+      const itemName = item.name || '';
+      const qty = (item.quantity || 1).toString();
+      const price = `${symbol}${item.price.toFixed(2)}`;
+      const total = `${symbol}${(item.price * item.quantity).toFixed(2)}`;
+      
+      text += itemRow(itemName, qty, price, total) + '\n';
+      
+      if (item.quantity > 10) {
+        text += `    @ ${symbol}${item.price.toFixed(2)} ea\n`;
+      }
     }
-    text += `Subtotal:      ${symbol}${gstInfo.baseAmount.toFixed(2)}\n`;
-    text += `GST (${gstInfo.rate}%):    ${symbol}${gstInfo.gstAmount.toFixed(2)}\n`;
-    text += '='.repeat(32) + '\n';
-    text += `TOTAL:        ${symbol}${gstInfo.totalAmount.toFixed(2)}\n`;
-    text += '='.repeat(32) + '\n';
-    if (hasDiscount) text += `* ${discountInfo?.value}% discount applied\n`;
-    text += `* Prices include ${gstInfo.rate}% GST\n`;
-    text += `GST Reg: ${gstInfo.regNo}\n\n`;
-    text += 'THANK YOU!\nVisit Again\n\n\n';
+    
+    text += '-'.repeat(width) + '\n';
+    
+    // Subtotal / Discount
+    let subtotal = saleData.total;
+    const discountAmt = discountInfo?.amount || saleData.discountAmount || 0;
+    const discountVal = discountInfo?.value || saleData.discountValue || 0;
+    const discountType = discountInfo?.type || saleData.discountType || 'percentage';
+    
+    if (discountAmt > 0) {
+      const originalTotal = saleData.total + discountAmt;
+      text += twoCols('Sub Total:', `${symbol}${originalTotal.toFixed(2)}`) + '\n';
+      text += twoCols('Discount:', `-${symbol}${discountAmt.toFixed(2)}`) + '\n';
+      if (discountType === 'percentage') {
+        text += `    (${discountVal}% off)\n`;
+      }
+      text += '-'.repeat(width) + '\n';
+      subtotal = saleData.total;
+    } else {
+      text += twoCols('Sub Total:', `${symbol}${subtotal.toFixed(2)}`) + '\n';
+      text += '-'.repeat(width) + '\n';
+    }
+    
+    // GST
+    if (company.gstPercentage > 0) {
+      const gstAmount = subtotal * (company.gstPercentage / (100 + company.gstPercentage));
+      const beforeGst = subtotal - gstAmount;
+      text += twoCols('Sub Total (before GST):', `${symbol}${beforeGst.toFixed(2)}`) + '\n';
+      text += twoCols(`GST (${company.gstPercentage}%):`, `${symbol}${gstAmount.toFixed(2)}`) + '\n';
+      text += '-'.repeat(width) + '\n';
+    }
+    
+    // Grand Total
+    text += twoCols('GRAND TOTAL:', `${symbol}${subtotal.toFixed(2)}`) + '\n';
+    text += '='.repeat(width) + '\n';
+    
+    // Payment
+    text += twoCols('PAYMENT:', saleData.paymentMethod || 'Cash') + '\n';
+    
+    const cashPaidVal = saleData.cashPaid || 0;
+    const changeVal = saleData.change || 0;
+    if (cashPaidVal > 0) {
+      text += twoCols('PAID:', `${symbol}${cashPaidVal.toFixed(2)}`) + '\n';
+      if (changeVal > 0) {
+        text += twoCols('CHANGE:', `${symbol}${changeVal.toFixed(2)}`) + '\n';
+      }
+    }
+    
+    text += '\n';
+    text += center('THANK YOU! COME AGAIN!') + '\n';
+    text += center('SMARTRETAIL BY UNIPROSG') + '\n';
+    if (company.gstPercentage > 0) {
+      text += center(`* Prices include ${company.gstPercentage}% GST`) + '\n';
+    }
+    text += '\n\n';
     return text;
   }
 
@@ -468,6 +582,18 @@ private static async printLaser(saleData: any, userId?: string | number, printer
   // ==================== UTILITIES ====================
   private static async checkAndroidPrintService(): Promise<boolean> { return Platform.OS === 'android'; }
 
+  private static cleanThermalText(text: string): string {
+    if (!text) return '';
+    return text
+      .replace(/[\u202f\u00a0]/g, ' ')
+      .replace(/[📞📧📦👤💳💎💰🏷️📱💵💵📊⚡🖨️✅⚠️📄🏷️]/gu, '')
+      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+      .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+      .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')
+      .replace(/[\u{2600}-\u{26FF}]/gu, '')
+      .replace(/[\u{2700}-\u{27BF}]/gu, '');
+  }
+
   static async testAllPrinters(): Promise<void> {
     const printers = await this.detectAllPrinters();
     let message = `📋 Found ${printers.length} printer(s):\n\n`;
@@ -481,159 +607,178 @@ static async printSalesReportThermal(reportData: any, userId?: string | number, 
         const company = await BillPDFGenerator.loadSettings(userId);
         const symbol = company.currencySymbol || '$';
         
-        let text = '\n';
-        text += '='.repeat(32) + '\n';
-        text += this.centerText(company.name || 'SALES REPORT', 32) + '\n';
-        text += '='.repeat(32) + '\n';
-        text += `Period: ${reportData.period || 'Today'}\n`;
-        text += `Date: ${new Date().toLocaleString()}\n`;
-        text += '-'.repeat(32) + '\n\n';
-        
-        // ========== SUMMARY ==========
-        text += this.centerText('SUMMARY', 32) + '\n';
-        text += '-'.repeat(32) + '\n';
-        text += this.twoColumns('Total Sales:', `${reportData.summary?.totalSales || 0}`, 32) + '\n';
-        text += this.twoColumns('Total Items:', `${reportData.summary?.totalItems || 0}`, 32) + '\n';
-        text += this.twoColumns('Total Revenue:', `${symbol}${(reportData.summary?.totalRevenue || 0).toFixed(2)}`, 32) + '\n';
-        
-        // ✅ DISCOUNT SECTION
-        if (reportData.summary?.totalDiscount > 0) {
-            text += this.twoColumns('Total Discount:', `-${symbol}${reportData.summary.totalDiscount.toFixed(2)}`, 32) + '\n';
-            const discountPercent = reportData.summary?.totalSales > 0 
-                ? ((reportData.summary.discountedSales / reportData.summary.totalSales) * 100).toFixed(1)
-                : '0';
-            text += this.twoColumns('Discounted Sales:', `${reportData.summary?.discountedSales || 0} / ${reportData.summary?.totalSales || 0} (${discountPercent}%)`, 32) + '\n';
-        }
-        
-        // ✅ VALUE CARD SECTION
-        if (reportData.summary?.totalValueCardAmount > 0) {
-            text += '\n' + '-'.repeat(32) + '\n';
-            text += this.centerText('💎 VALUE CARD USAGE', 32) + '\n';
-            text += '-'.repeat(32) + '\n';
-            text += this.twoColumns('Total Value Card:', `${symbol}${(reportData.summary?.totalValueCardAmount || 0).toFixed(2)}`, 32) + '\n';
-            text += this.twoColumns('Card Transactions:', `${reportData.summary?.valueCardTransactions || 0}`, 32) + '\n';
-        }
-        
-        text += '\n' + '-'.repeat(32) + '\n';
-        
-        // ========== PAYMENT BREAKDOWN ==========
-        text += this.centerText('PAYMENT BREAKDOWN', 32) + '\n';
-        text += '-'.repeat(32) + '\n';
-        
-        if (reportData.paymentBreakdown) {
-            const sortedMethods = Object.entries(reportData.paymentBreakdown).sort((a, b) => (b[1] as number) - (a[1] as number));
+        const buildText = (width: number) => {
+            const getReportDateStr = (rawDate: any): string => {
+              const d = rawDate ? new Date(rawDate) : new Date();
+              const utcTime = d.getTime() + (d.getTimezoneOffset() * 60 * 1000);
+              const sgTime = new Date(utcTime + (8 * 60 * 60 * 1000));
+              const day = String(sgTime.getDate()).padStart(2, '0');
+              const month = String(sgTime.getMonth() + 1).padStart(2, '0');
+              const year = sgTime.getFullYear();
+              const hours = String(sgTime.getHours()).padStart(2, '0');
+              const minutes = String(sgTime.getMinutes()).padStart(2, '0');
+              return `${day}/${month}/${year} ${hours}:${minutes}`;
+            };
+
+            let text = '\n';
+            text += '='.repeat(width) + '\n';
+            text += this.centerText(company.name || 'SALES REPORT', width) + '\n';
+            text += '='.repeat(width) + '\n';
+            text += `Period: ${reportData.period || 'Today'}\n`;
+            text += `Date: ${getReportDateStr(new Date())}\n`;
+            text += '-'.repeat(width) + '\n\n';
             
-            for (const [method, amount] of sortedMethods) {
-                let methodIcon = '';
-                const methodLower = method.toLowerCase();
-                
-                if (methodLower.includes('cash')) methodIcon = '💰';
-                else if (methodLower.includes('upi')) methodIcon = '📱';
-                else if (methodLower.includes('paynow')) methodIcon = '📱';
-                else if (methodLower.includes('card')) methodIcon = '💳';
-                else if (methodLower.includes('value')) methodIcon = '💎';
-                else if (methodLower.includes('discount')) methodIcon = '🏷️';
-                else methodIcon = '💵';
-                
-                const methodName = `${methodIcon} ${method}`;
-                text += this.twoColumns(methodName, `${symbol}${(amount as number).toFixed(2)}`, 32) + '\n';
+            // ========== SUMMARY ==========
+            text += this.centerText('SUMMARY', width) + '\n';
+            text += '-'.repeat(width) + '\n';
+            text += this.twoColumns('Total Sales:', `${reportData.summary?.totalSales || 0}`, width) + '\n';
+            text += this.twoColumns('Total Items:', `${reportData.summary?.totalItems || 0}`, width) + '\n';
+            text += this.twoColumns('Total Revenue:', `${symbol}${(reportData.summary?.totalRevenue || 0).toFixed(2)}`, width) + '\n';
+            
+            // ✅ DISCOUNT SECTION
+            if (reportData.summary?.totalDiscount > 0) {
+                text += this.twoColumns('Total Discount:', `-${symbol}${reportData.summary.totalDiscount.toFixed(2)}`, width) + '\n';
+                const discountPercent = reportData.summary?.totalSales > 0 
+                    ? ((reportData.summary.discountedSales / reportData.summary.totalSales) * 100).toFixed(1)
+                    : '0';
+                text += this.twoColumns('Discounted Sales:', `${reportData.summary?.discountedSales || 0} / ${reportData.summary?.totalSales || 0} (${discountPercent}%)`, width) + '\n';
             }
-        }
-        
-        // ========== STAFF BREAKDOWN ==========
-        const staffMap: Record<string, any> = {};
-        if (reportData.salesHistory && Array.isArray(reportData.salesHistory)) {
-            reportData.salesHistory.forEach((sale: any) => {
-                if (sale.status === 'VOIDED') return;
-                const name = sale.staffName || 'Unassigned / Cashier';
-                if (!staffMap[name]) {
-                    staffMap[name] = {
-                        revenue: 0,
-                        count: 0,
-                        payments: {},
-                        categories: {},
-                        items: {}
-                    };
-                }
-                const entry = staffMap[name];
-                entry.revenue += Number(sale.total) || 0;
-                entry.count += 1;
-
-                const method = sale.paymentMethod || 'Unknown';
-                entry.payments[method] = (entry.payments[method] || 0) + (Number(sale.total) || 0);
-
-                if (sale.items && Array.isArray(sale.items)) {
-                    sale.items.forEach((item: any) => {
-                        const itemName = item.name || 'Unknown Item';
-                        const itemCat = item.category || item.displayCategory || 'Uncategorized';
-                        const qty = Number(item.quantity) || 0;
-                        const itemVal = (Number(item.price) || 0) * qty;
-
-                        entry.categories[itemCat] = (entry.categories[itemCat] || 0) + itemVal;
-                        if (!entry.items[itemName]) {
-                            entry.items[itemName] = 0;
-                        }
-                        entry.items[itemName] += qty;
-                    });
-                }
-            });
-        }
-
-        const staffList = Object.entries(staffMap);
-        if (staffList.length > 0) {
-            text += '\n' + '='.repeat(32) + '\n';
-            text += this.centerText('STAFF BREAKDOWN', 32) + '\n';
-            text += '='.repeat(32) + '\n';
-
-            for (const [staffName, data] of staffList) {
-                text += `👤 ${staffName}\n`;
-                text += this.twoColumns('  Revenue:', `${symbol}${data.revenue.toFixed(2)}`, 32) + '\n';
-                text += this.twoColumns('  Sales Count:', `${data.count}`, 32) + '\n';
-
-                // Payments
-                text += '  - Payments:\n';
-                for (const [method, amount] of Object.entries(data.payments)) {
-                    text += this.twoColumns(`    ${method}:`, `${symbol}${(amount as number).toFixed(2)}`, 32) + '\n';
-                }
-
-                // Categories
-                text += '  - Categories:\n';
-                for (const [catName, amount] of Object.entries(data.categories)) {
-                    text += this.twoColumns(`    ${catName}:`, `${symbol}${(amount as number).toFixed(2)}`, 32) + '\n';
-                }
-
-                // Items
-                text += '  - Items:\n';
-                for (const [itemName, qty] of Object.entries(data.items)) {
-                    text += this.twoColumns(`    ${itemName}:`, `${qty}x`, 32) + '\n';
-                }
-                text += '-'.repeat(32) + '\n';
+            
+            // ✅ VALUE CARD SECTION
+            if (reportData.summary?.totalValueCardAmount > 0) {
+                text += '\n' + '-'.repeat(width) + '\n';
+                text += this.centerText('VALUE CARD USAGE', width) + '\n';
+                text += '-'.repeat(width) + '\n';
+                text += this.twoColumns('Total Value Card:', `${symbol}${(reportData.summary?.totalValueCardAmount || 0).toFixed(2)}`, width) + '\n';
+                text += this.twoColumns('Card Transactions:', `${reportData.summary?.valueCardTransactions || 0}`, width) + '\n';
             }
-        }
+            
+            text += '\n' + '-'.repeat(width) + '\n';
+            
+            // ========== PAYMENT BREAKDOWN ==========
+            text += this.centerText('PAYMENT BREAKDOWN', width) + '\n';
+            text += '-'.repeat(width) + '\n';
+            
+            if (reportData.paymentBreakdown) {
+                const sortedMethods = Object.entries(reportData.paymentBreakdown).sort((a, b) => (b[1] as number) - (a[1] as number));
+                
+                for (const [method, amount] of sortedMethods) {
+                    let methodIcon = '';
+                    const methodLower = method.toLowerCase();
+                    
+                    if (methodLower.includes('cash')) methodIcon = '💰';
+                    else if (methodLower.includes('upi')) methodIcon = '📱';
+                    else if (methodLower.includes('paynow')) methodIcon = '📱';
+                    else if (methodLower.includes('card')) methodIcon = '💳';
+                    else if (methodLower.includes('value')) methodIcon = '💎';
+                    else if (methodLower.includes('discount')) methodIcon = '🏷️';
+                    else methodIcon = '💵';
+                    
+                    const methodName = method;
+                    text += this.twoColumns(methodName, `${symbol}${(amount as number).toFixed(2)}`, width) + '\n';
+                }
+            }
+            
+            // ========== STAFF BREAKDOWN ==========
+            const staffMap: Record<string, any> = {};
+            if (reportData.salesHistory && Array.isArray(reportData.salesHistory)) {
+                reportData.salesHistory.forEach((sale: any) => {
+                    if (sale.status === 'VOIDED') return;
+                    const name = sale.staffName || 'Unassigned / Cashier';
+                    if (!staffMap[name]) {
+                        staffMap[name] = {
+                            revenue: 0,
+                            count: 0,
+                            payments: {},
+                            categories: {},
+                            items: {}
+                        };
+                    }
+                    const entry = staffMap[name];
+                    entry.revenue += Number(sale.total) || 0;
+                    entry.count += 1;
+    
+                    const method = sale.paymentMethod || 'Unknown';
+                    entry.payments[method] = (entry.payments[method] || 0) + (Number(sale.total) || 0);
+    
+                    if (sale.items && Array.isArray(sale.items)) {
+                        sale.items.forEach((item: any) => {
+                            const itemName = item.name || 'Unknown Item';
+                            const itemCat = item.category || item.displayCategory || 'Uncategorized';
+                            const qty = Number(item.quantity) || 0;
+                            const itemVal = (Number(item.price) || 0) * qty;
+    
+                            entry.categories[itemCat] = (entry.categories[itemCat] || 0) + itemVal;
+                            if (!entry.items[itemName]) {
+                                entry.items[itemName] = 0;
+                            }
+                            entry.items[itemName] += qty;
+                        });
+                    }
+                });
+            }
+    
+            const staffList = Object.entries(staffMap);
+            if (staffList.length > 0) {
+                text += '\n' + '='.repeat(width) + '\n';
+                text += this.centerText('STAFF BREAKDOWN', width) + '\n';
+                text += '='.repeat(width) + '\n';
+    
+                for (const [staffName, data] of staffList) {
+                text += `Staff Name: ${staffName}\n`;
+                    text += this.twoColumns('  Revenue:', `${symbol}${data.revenue.toFixed(2)}`, width) + '\n';
+                    text += this.twoColumns('  Sales Count:', `${data.count}`, width) + '\n';
+    
+                    // Payments
+                    text += '  - Payments:\n';
+                    for (const [method, amount] of Object.entries(data.payments)) {
+                        text += this.twoColumns(`    ${method}:`, `${symbol}${(amount as number).toFixed(2)}`, width) + '\n';
+                    }
+    
+                    // Categories
+                    text += '  - Categories:\n';
+                    for (const [catName, amount] of Object.entries(data.categories)) {
+                        text += this.twoColumns(`    ${catName}:`, `${symbol}${(amount as number).toFixed(2)}`, width) + '\n';
+                    }
+    
+                    // Items
+                    text += '  - Items:\n';
+                    for (const [itemName, qty] of Object.entries(data.items)) {
+                        text += this.twoColumns(`    ${itemName}:`, `${qty}x`, width) + '\n';
+                    }
+                    text += '-'.repeat(width) + '\n';
+                }
+            }
+            
+            text += '\n' + '='.repeat(width) + '\n';
+            text += this.centerText('END OF REPORT', width) + '\n';
+            text += '='.repeat(width) + '\n\n';
+            text += this.centerText('SMARTRETAIL BY UNIPROSG', width) + '\n';
+            text += '\n\n';
+            return text;
+        };
         
-        text += '\n' + '='.repeat(32) + '\n';
-        text += this.centerText('END OF REPORT', 32) + '\n';
-        text += '='.repeat(32) + '\n\n';
-        text += this.centerText('SMARTRETAIL BY UNIPROSG', 32) + '\n';
-        text += '\n\n';
-        
+        let printedOnNetwork = false;
         if (company.printerEnabled) {
             console.log('🔌 Network printer enabled, printing sales report...');
-            return await NetworkPrinterService.printRawText(
+            const networkText = this.cleanThermalText(buildText(48));
+            printedOnNetwork = await NetworkPrinterService.printRawText(
                 company.printerIP || '192.168.0.241',
                 company.printerPort || 9100,
-                text
+                networkText
             );
         }
 
+        let printedOnSunmi = false;
         const sunmiReady = await SunmiPrinterService.init();
-        if (!sunmiReady) {
-            console.log('Sunmi printer not available, using PDF fallback');
-            return false;
+        if (sunmiReady) {
+            const sunmiText = this.cleanThermalText(buildText(32));
+            await SunmiPrinterService.printRawText(sunmiText);
+            await SunmiPrinterService.cutPaper();
+            printedOnSunmi = true;
         }
-        await SunmiPrinterService.printRawText(text);
-        await SunmiPrinterService.cutPaper();
-        return true;
+        
+        return printedOnNetwork || printedOnSunmi;
         
     } catch (error) {
         console.log('Thermal sales report error:', error);
@@ -656,150 +801,151 @@ static async printCategoryReportThermal(
         const symbol = company.currencySymbol || '$';
         const summary = options?.summary || {};
         
-        let text = '\n';
-        text += '='.repeat(32) + '\n';
-        text += this.centerText(company.name || 'CATEGORY REPORT', 32) + '\n';
-        text += '='.repeat(32) + '\n';
-        text += `Filter: ${options?.filter || 'Today'}\n`;
-        text += `Date: ${new Date().toLocaleString()}\n`;
-        text += '-'.repeat(32) + '\n\n';
-        
-        if (selectedCategory) {
-            // Single category view
-            text += this.centerText(`📦 ${selectedCategory}`, 32) + '\n';
-            text += '-'.repeat(32) + '\n';
-            text += this.twoColumns('Total Revenue:', `${symbol}${(summary.totalRevenue || 0).toFixed(2)}`, 32) + '\n';
-            text += this.twoColumns('Total Items:', `${summary.totalItems || 0}`, 32) + '\n';
-            text += this.twoColumns('Transactions:', `${summary.totalSales || 0}`, 32) + '\n';
+        const buildText = (width: number) => {
+            const getReportDateStr = (rawDate: any): string => {
+              const d = rawDate ? new Date(rawDate) : new Date();
+              const utcTime = d.getTime() + (d.getTimezoneOffset() * 60 * 1000);
+              const sgTime = new Date(utcTime + (8 * 60 * 60 * 1000));
+              const day = String(sgTime.getDate()).padStart(2, '0');
+              const month = String(sgTime.getMonth() + 1).padStart(2, '0');
+              const year = sgTime.getFullYear();
+              const hours = String(sgTime.getHours()).padStart(2, '0');
+              const minutes = String(sgTime.getMinutes()).padStart(2, '0');
+              return `${day}/${month}/${year} ${hours}:${minutes}`;
+            };
+
+            let text = '\n';
+            text += '='.repeat(width) + '\n';
+            text += this.centerText(company.name || 'CATEGORY REPORT', width) + '\n';
+            text += '='.repeat(width) + '\n';
+            text += `Filter: ${options?.filter || 'Today'}\n`;
+            text += `Date: ${getReportDateStr(new Date())}\n`;
+            text += '-'.repeat(width) + '\n\n';
             
-            // ✅ Discount in category
-            if (summary.totalDiscount > 0) {
-                text += this.twoColumns('Total Discount:', `-${symbol}${summary.totalDiscount.toFixed(2)}`, 32) + '\n';
-                text += this.twoColumns('Discounted Trans:', `${summary.discountedTransactions || 0} / ${summary.totalSales || 0}`, 32) + '\n';
-            }
-            
-            // ✅ Value Card in category
-            if (summary.totalValueCardAmount > 0) {
-                text += this.twoColumns('Value Card Used:', `${symbol}${summary.totalValueCardAmount.toFixed(2)}`, 32) + '\n';
-            }
-            
-            // Payment breakdown for this category
-            if (summary.paymentBreakdown && Object.keys(summary.paymentBreakdown).length > 0) {
-                text += '\n' + '-'.repeat(32) + '\n';
-                text += this.centerText('PAYMENT BREAKDOWN', 32) + '\n';
-                text += '-'.repeat(32) + '\n';
+            if (selectedCategory) {
+                // Single category view
+                text += this.centerText(selectedCategory, width) + '\n';
+                text += '-'.repeat(width) + '\n';
+                text += this.twoColumns('Total Revenue:', `${symbol}${(summary.totalRevenue || 0).toFixed(2)}`, width) + '\n';
+                text += this.twoColumns('Total Items:', `${summary.totalItems || 0}`, width) + '\n';
+                text += this.twoColumns('Transactions:', `${summary.totalSales || 0}`, width) + '\n';
                 
-                const sortedMethods = Object.entries(summary.paymentBreakdown).sort((a, b) => (b[1] as number) - (a[1] as number));
-                for (const [method, amount] of sortedMethods) {
-                    let methodIcon = '';
-                    const methodLower = method.toLowerCase();
-                    if (methodLower.includes('cash')) methodIcon = '💰';
-                    else if (methodLower.includes('upi')) methodIcon = '📱';
-                    else if (methodLower.includes('paynow')) methodIcon = '📱';
-                    else if (methodLower.includes('card')) methodIcon = '💳';
-                    else if (methodLower.includes('value')) methodIcon = '💎';
-                    else methodIcon = '💵';
-                    
-                    text += this.twoColumns(`${methodIcon} ${method}`, `${symbol}${(amount as number).toFixed(2)}`, 32) + '\n';
+                // ✅ Discount in category
+                if (summary.totalDiscount > 0) {
+                    text += this.twoColumns('Total Discount:', `-${symbol}${summary.totalDiscount.toFixed(2)}`, width) + '\n';
+                    text += this.twoColumns('Discounted Trans:', `${summary.discountedTransactions || 0} / ${summary.totalSales || 0}`, width) + '\n';
                 }
-            }
-            
-            // Items list
-            if (categoryItems && categoryItems.length > 0) {
-                text += '\n' + '-'.repeat(32) + '\n';
-                text += this.centerText('TOP ITEMS', 32) + '\n';
-                text += '-'.repeat(32) + '\n';
                 
-                const topItems = [...categoryItems].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
-                for (const item of topItems) {
-                    text += `\n${item.name}\n`;
-                    text += `  Qty: ${item.quantity}  Revenue: ${symbol}${item.revenue.toFixed(2)}\n`;
-                    if (item.discountAmount > 0) {
-                        text += `  Discount: -${symbol}${item.discountAmount.toFixed(2)}\n`;
+                // ✅ Value Card in category
+                if (summary.totalValueCardAmount > 0) {
+                    text += this.twoColumns('Value Card Used:', `${symbol}${summary.totalValueCardAmount.toFixed(2)}`, width) + '\n';
+                }
+                
+                // Payment breakdown for this category
+                if (summary.paymentBreakdown && Object.keys(summary.paymentBreakdown).length > 0) {
+                    text += '\n' + '-'.repeat(width) + '\n';
+                    text += this.centerText('PAYMENT BREAKDOWN', width) + '\n';
+                    text += '-'.repeat(width) + '\n';
+                    
+                    const sortedMethods = Object.entries(summary.paymentBreakdown).sort((a, b) => (b[1] as number) - (a[1] as number));
+                    for (const [method, amount] of sortedMethods) {
+                        text += this.twoColumns(method, `${symbol}${(amount as number).toFixed(2)}`, width) + '\n';
+                    }
+                }
+                
+                // Items list
+                if (categoryItems && categoryItems.length > 0) {
+                    text += '\n' + '-'.repeat(width) + '\n';
+                    text += this.centerText('TOP ITEMS', width) + '\n';
+                    text += '-'.repeat(width) + '\n';
+                    
+                    const topItems = [...categoryItems].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+                    for (const item of topItems) {
+                        text += `\n${item.name}\n`;
+                        text += `  Qty: ${item.quantity}  Revenue: ${symbol}${item.revenue.toFixed(2)}\n`;
+                        if (item.discountAmount > 0) {
+                            text += `  Discount: -${symbol}${item.discountAmount.toFixed(2)}\n`;
+                        }
+                    }
+                }
+            } else {
+                // All categories view
+                text += this.centerText('CATEGORIES SUMMARY', width) + '\n';
+                text += '-'.repeat(width) + '\n';
+                text += this.twoColumns('Categories:', `${categories.length}`, width) + '\n';
+                text += this.twoColumns('Total Revenue:', `${symbol}${(summary.totalRevenue || 0).toFixed(2)}`, width) + '\n';
+                text += this.twoColumns('Total Items:', `${summary.totalItems || 0}`, width) + '\n';
+                text += this.twoColumns('Transactions:', `${summary.totalSales || 0}`, width) + '\n';
+                
+                // ✅ Discount summary
+                if (summary.totalDiscount > 0) {
+                    text += this.twoColumns('Total Discount:', `-${symbol}${summary.totalDiscount.toFixed(2)}`, width) + '\n';
+                }
+                
+                // ✅ Value Card summary
+                if (summary.totalValueCardAmount > 0) {
+                    text += this.twoColumns('Value Card Total:', `${symbol}${summary.totalValueCardAmount.toFixed(2)}`, width) + '\n';
+                    text += this.twoColumns('Value Card Trans:', `${summary.valueCardTransactionCount || 0}`, width) + '\n';
+                }
+                
+                // Payment breakdown
+                if (summary.paymentBreakdown && Object.keys(summary.paymentBreakdown).length > 0) {
+                    text += '\n' + '-'.repeat(width) + '\n';
+                    text += this.centerText('PAYMENT BREAKDOWN', width) + '\n';
+                    text += '-'.repeat(width) + '\n';
+                    
+                    const sortedMethods = Object.entries(summary.paymentBreakdown).sort((a, b) => (b[1] as number) - (a[1] as number));
+                    for (const [method, amount] of sortedMethods) {
+                        text += this.twoColumns(method, `${symbol}${(amount as number).toFixed(2)}`, width) + '\n';
+                    }
+                }
+                
+                // Category breakdown
+                text += '\n' + '-'.repeat(width) + '\n';
+                text += this.centerText('CATEGORY BREAKDOWN', width) + '\n';
+                text += '-'.repeat(width) + '\n';
+                
+                for (const cat of categories) {
+                    text += `\n${cat.name}\n`;
+                    text += `  Revenue: ${symbol}${(cat.totalRevenue || 0).toFixed(2)}\n`;
+                    text += `  Items: ${cat.totalQuantity || 0}\n`;
+                    if (cat.discountAmount > 0) {
+                        text += `  Discount: -${symbol}${cat.discountAmount.toFixed(2)}\n`;
+                    }
+                    if (cat.valueCardAmount > 0) {
+                        text += `  Value Card: ${symbol}${cat.valueCardAmount.toFixed(2)}\n`;
                     }
                 }
             }
-        } else {
-            // All categories view
-            text += this.centerText('CATEGORIES SUMMARY', 32) + '\n';
-            text += '-'.repeat(32) + '\n';
-            text += this.twoColumns('Categories:', `${categories.length}`, 32) + '\n';
-            text += this.twoColumns('Total Revenue:', `${symbol}${(summary.totalRevenue || 0).toFixed(2)}`, 32) + '\n';
-            text += this.twoColumns('Total Items:', `${summary.totalItems || 0}`, 32) + '\n';
-            text += this.twoColumns('Transactions:', `${summary.totalSales || 0}`, 32) + '\n';
             
-            // ✅ Discount summary
-            if (summary.totalDiscount > 0) {
-                text += this.twoColumns('Total Discount:', `-${symbol}${summary.totalDiscount.toFixed(2)}`, 32) + '\n';
-            }
-            
-            // ✅ Value Card summary
-            if (summary.totalValueCardAmount > 0) {
-                text += this.twoColumns('Value Card Total:', `${symbol}${summary.totalValueCardAmount.toFixed(2)}`, 32) + '\n';
-                text += this.twoColumns('Value Card Trans:', `${summary.valueCardTransactionCount || 0}`, 32) + '\n';
-            }
-            
-            // Payment breakdown
-            if (summary.paymentBreakdown && Object.keys(summary.paymentBreakdown).length > 0) {
-                text += '\n' + '-'.repeat(32) + '\n';
-                text += this.centerText('PAYMENT BREAKDOWN', 32) + '\n';
-                text += '-'.repeat(32) + '\n';
-                
-                const sortedMethods = Object.entries(summary.paymentBreakdown).sort((a, b) => (b[1] as number) - (a[1] as number));
-                for (const [method, amount] of sortedMethods) {
-                    let methodIcon = '';
-                    const methodLower = method.toLowerCase();
-                    if (methodLower.includes('cash')) methodIcon = '💰';
-                    else if (methodLower.includes('upi')) methodIcon = '📱';
-                    else if (methodLower.includes('paynow')) methodIcon = '📱';
-                    else if (methodLower.includes('card')) methodIcon = '💳';
-                    else if (methodLower.includes('value')) methodIcon = '💎';
-                    else methodIcon = '💵';
-                    
-                    text += this.twoColumns(`${methodIcon} ${method}`, `${symbol}${(amount as number).toFixed(2)}`, 32) + '\n';
-                }
-            }
-            
-            // Category breakdown
-            text += '\n' + '-'.repeat(32) + '\n';
-            text += this.centerText('CATEGORY BREAKDOWN', 32) + '\n';
-            text += '-'.repeat(32) + '\n';
-            
-            for (const cat of categories) {
-                text += `\n${cat.name}\n`;
-                text += `  Revenue: ${symbol}${(cat.totalRevenue || 0).toFixed(2)}\n`;
-                text += `  Items: ${cat.totalQuantity || 0}\n`;
-                if (cat.discountAmount > 0) {
-                    text += `  Discount: -${symbol}${cat.discountAmount.toFixed(2)}\n`;
-                }
-                if (cat.valueCardAmount > 0) {
-                    text += `  Value Card: ${symbol}${cat.valueCardAmount.toFixed(2)}\n`;
-                }
-            }
-        }
+            text += '\n' + '='.repeat(width) + '\n';
+            text += this.centerText('END OF REPORT', width) + '\n';
+            text += '='.repeat(width) + '\n\n';
+            text += this.centerText('SMARTRETAIL BY UNIPROSG', width) + '\n';
+            return text;
+        };
         
-        text += '\n' + '='.repeat(32) + '\n';
-        text += this.centerText('END OF REPORT', 32) + '\n';
-        text += '='.repeat(32) + '\n\n';
-        text += this.centerText('SMARTRETAIL BY UNIPROSG', 32) + '\n';
-        
+        let printedOnNetwork = false;
         if (company.printerEnabled) {
             console.log('🔌 Network printer enabled, printing category report...');
-            return await NetworkPrinterService.printRawText(
+            const networkText = buildText(48);
+            printedOnNetwork = await NetworkPrinterService.printRawText(
                 company.printerIP || '192.168.0.241',
                 company.printerPort || 9100,
-                text
+                networkText
             );
         }
 
+        let printedOnSunmi = false;
         const sunmiReady = await SunmiPrinterService.init();
-        if (!sunmiReady) {
-            return false;
+        if (sunmiReady) {
+            const sunmiText = buildText(32);
+            await SunmiPrinterService.printRawText(sunmiText);
+            await SunmiPrinterService.cutPaper();
+            printedOnSunmi = true;
         }
-        await SunmiPrinterService.printRawText(text);
-        await SunmiPrinterService.cutPaper();
         
-        return true;
+        return printedOnNetwork || printedOnSunmi;
         
     } catch (error) {
         console.log('Thermal category report error:', error);
@@ -820,108 +966,127 @@ static async printCategoryReportThermal(
       try {
           const company = await BillPDFGenerator.loadSettings(userId);
           const symbol = company.currencySymbol || '$';
+          let printedOnNetwork = false;
 
-          let text = '\n';
-          text += '='.repeat(32) + '\n';
-          text += this.centerText(company.name || outletName || 'SETTLEMENT REPORT', 32) + '\n';
-          text += '='.repeat(32) + '\n';
-          text += `Date: ${dateStr}\n`;
-          text += `Cashier: ${cashierName}\n`;
-          text += `Printed: ${new Date().toLocaleString()}\n`;
-          text += '-'.repeat(32) + '\n\n';
+          const buildText = (width: number) => {
+              const getReportDateStr = (rawDate: any): string => {
+                const d = rawDate ? new Date(rawDate) : new Date();
+                const utcTime = d.getTime() + (d.getTimezoneOffset() * 60 * 1000);
+                const sgTime = new Date(utcTime + (8 * 60 * 60 * 1000));
+                const day = String(sgTime.getDate()).padStart(2, '0');
+                const month = String(sgTime.getMonth() + 1).padStart(2, '0');
+                const year = sgTime.getFullYear();
+                const hours = String(sgTime.getHours()).padStart(2, '0');
+                const minutes = String(sgTime.getMinutes()).padStart(2, '0');
+                return `${day}/${month}/${year} ${hours}:${minutes}`;
+              };
 
-          // ========== SALES SUMMARY ==========
-          text += this.centerText('SALES SUMMARY', 32) + '\n';
-          text += '-'.repeat(32) + '\n';
-          text += this.twoColumns('Total Sales:', `${symbol}${(summary.totalSales || 0).toFixed(2)}`, 32) + '\n';
-          text += this.twoColumns('Discount:', `-${symbol}${(summary.totalDiscount || 0).toFixed(2)}`, 32) + '\n';
-          text += this.twoColumns('Void Amount:', `-${symbol}${(summary.voidAmount || 0).toFixed(2)}`, 32) + '\n';
-          text += this.twoColumns('Net Sales:', `${symbol}${(summary.netSales || 0).toFixed(2)}`, 32) + '\n';
-          text += '-'.repeat(32) + '\n\n';
-
-          // ========== PAYMENT BREAKDOWN ==========
-          text += this.centerText('PAYMENT BREAKDOWN', 32) + '\n';
-          text += '-'.repeat(32) + '\n';
-          if (paymodeBreakdown.cash > 0) text += this.twoColumns('💵 Cash:', `${symbol}${paymodeBreakdown.cash.toFixed(2)}`, 32) + '\n';
-          if (paymodeBreakdown.paynow > 0) text += this.twoColumns('📱 PayNow:', `${symbol}${paymodeBreakdown.paynow.toFixed(2)}`, 32) + '\n';
-          if (paymodeBreakdown.upi > 0) text += this.twoColumns('📱 UPI:', `${symbol}${paymodeBreakdown.upi.toFixed(2)}`, 32) + '\n';
-          if (paymodeBreakdown.card > 0) text += this.twoColumns('💳 Card:', `${symbol}${paymodeBreakdown.card.toFixed(2)}`, 32) + '\n';
-          if (paymodeBreakdown.valuecard > 0) text += this.twoColumns('💎 Value Card:', `${symbol}${paymodeBreakdown.valuecard.toFixed(2)}`, 32) + '\n';
-          if (paymodeBreakdown.cdc > 0) text += this.twoColumns('🎫 CDC Voucher:', `${symbol}${paymodeBreakdown.cdc.toFixed(2)}`, 32) + '\n';
-          if (paymodeBreakdown.other > 0) text += this.twoColumns('💵 Other:', `${symbol}${paymodeBreakdown.other.toFixed(2)}`, 32) + '\n';
-          text += '-'.repeat(32) + '\n\n';
-
-          // ========== CASH FLOW ==========
-          text += this.centerText('CASH FLOW', 32) + '\n';
-          text += '-'.repeat(32) + '\n';
-          text += this.twoColumns('Opening Cash:', `${symbol}${cashFlow.openingCash.toFixed(2)}`, 32) + '\n';
-          text += this.twoColumns('Cash Received:', `+${symbol}${cashFlow.cashReceived.toFixed(2)}`, 32) + '\n';
-          text += this.twoColumns('Cash Out Total:', `-${symbol}${cashFlow.manualCashOutTotal.toFixed(2)}`, 32) + '\n';
-          text += this.twoColumns('Expected Closing:', `${symbol}${cashFlow.expectedClosing.toFixed(2)}`, 32) + '\n';
-          text += this.twoColumns('Physical Cash:', `${symbol}${cashFlow.physicalCash.toFixed(2)}`, 32) + '\n';
-          
-          const varianceSign = cashFlow.variance >= 0 ? '+' : '-';
-          text += this.twoColumns('Variance:', `${varianceSign}${symbol}${Math.abs(cashFlow.variance).toFixed(2)}`, 32) + '\n';
-          text += '-'.repeat(32) + '\n\n';
-
-          // ========== STAFF BREAKDOWN ==========
-          if (staffBreakdown && staffBreakdown.length > 0) {
-              text += this.centerText('STAFF SALES BREAKDOWN', 32) + '\n';
-              text += '='.repeat(32) + '\n';
-              for (const staff of staffBreakdown) {
-                  text += `👤 ${staff.name}\n`;
-                  text += this.twoColumns('  Total Sales:', `${symbol}${staff.totalSales.toFixed(2)}`, 32) + '\n';
-                  
-                  // Payments
-                  const payList = [];
-                  if (staff.cash > 0) payList.push(`Cash: ${symbol}${staff.cash.toFixed(2)}`);
-                  if (staff.paynow > 0) payList.push(`PayNow: ${symbol}${staff.paynow.toFixed(2)}`);
-                  if (staff.upi > 0) payList.push(`UPI: ${symbol}${staff.upi.toFixed(2)}`);
-                  if (staff.card > 0) payList.push(`Card: ${symbol}${staff.card.toFixed(2)}`);
-                  if (staff.valuecard > 0) payList.push(`Value Card: ${symbol}${staff.valuecard.toFixed(2)}`);
-                  
-                  if (payList.length > 0) {
-                      text += `  - Payments: ${payList.join(', ')}\n`;
+              let text = '\n';
+              text += '='.repeat(width) + '\n';
+              text += this.centerText(company.name || outletName || 'SETTLEMENT REPORT', width) + '\n';
+              text += '='.repeat(width) + '\n';
+              text += `Date: ${dateStr}\n`;
+              text += `Cashier: ${cashierName}\n`;
+              text += `Printed: ${getReportDateStr(new Date())}\n`;
+              text += '-'.repeat(width) + '\n\n';
+    
+              // ========== SALES SUMMARY ==========
+              text += this.centerText('SALES SUMMARY', width) + '\n';
+              text += '-'.repeat(width) + '\n';
+              text += this.twoColumns('Total Sales:', `${symbol}${(summary.totalSales || 0).toFixed(2)}`, width) + '\n';
+              text += this.twoColumns('Discount:', `-${symbol}${(summary.totalDiscount || 0).toFixed(2)}`, width) + '\n';
+              text += this.twoColumns('Void Amount:', `-${symbol}${(summary.voidAmount || 0).toFixed(2)}`, width) + '\n';
+              text += this.twoColumns('Net Sales:', `${symbol}${(summary.netSales || 0).toFixed(2)}`, width) + '\n';
+              text += '-'.repeat(width) + '\n\n';
+    
+              // ========== PAYMENT BREAKDOWN ==========
+              text += this.centerText('PAYMENT BREAKDOWN', width) + '\n';
+              text += '-'.repeat(width) + '\n';
+              if (paymodeBreakdown.cash > 0) text += this.twoColumns('Cash:', `${symbol}${paymodeBreakdown.cash.toFixed(2)}`, width) + '\n';
+              if (paymodeBreakdown.paynow > 0) text += this.twoColumns('PayNow:', `${symbol}${paymodeBreakdown.paynow.toFixed(2)}`, width) + '\n';
+              if (paymodeBreakdown.upi > 0) text += this.twoColumns('UPI:', `${symbol}${paymodeBreakdown.upi.toFixed(2)}`, width) + '\n';
+              if (paymodeBreakdown.card > 0) text += this.twoColumns('Card:', `${symbol}${paymodeBreakdown.card.toFixed(2)}`, width) + '\n';
+              if (paymodeBreakdown.valuecard > 0) text += this.twoColumns('Value Card:', `${symbol}${paymodeBreakdown.valuecard.toFixed(2)}`, width) + '\n';
+              if (paymodeBreakdown.cdc > 0) text += this.twoColumns('CDC Voucher:', `${symbol}${paymodeBreakdown.cdc.toFixed(2)}`, width) + '\n';
+              if (paymodeBreakdown.other > 0) text += this.twoColumns('Other:', `${symbol}${paymodeBreakdown.other.toFixed(2)}`, width) + '\n';
+              text += '-'.repeat(width) + '\n\n';
+    
+              // ========== CASH FLOW ==========
+              text += this.centerText('CASH FLOW', width) + '\n';
+              text += '-'.repeat(width) + '\n';
+              text += this.twoColumns('Opening Cash:', `${symbol}${cashFlow.openingCash.toFixed(2)}`, width) + '\n';
+              text += this.twoColumns('Cash Received:', `+${symbol}${cashFlow.cashReceived.toFixed(2)}`, width) + '\n';
+              text += this.twoColumns('Cash Out Total:', `-${symbol}${cashFlow.manualCashOutTotal.toFixed(2)}`, width) + '\n';
+              text += this.twoColumns('Expected Closing:', `${symbol}${cashFlow.expectedClosing.toFixed(2)}`, width) + '\n';
+              text += this.twoColumns('Physical Cash:', `${symbol}${cashFlow.physicalCash.toFixed(2)}`, width) + '\n';
+              
+              const varianceSign = cashFlow.variance >= 0 ? '+' : '-';
+              text += this.twoColumns('Variance:', `${varianceSign}${symbol}${Math.abs(cashFlow.variance).toFixed(2)}`, width) + '\n';
+              text += '-'.repeat(width) + '\n\n';
+    
+              // ========== STAFF BREAKDOWN ==========
+              if (staffBreakdown && staffBreakdown.length > 0) {
+                  text += this.centerText('STAFF SALES BREAKDOWN', width) + '\n';
+                  text += '='.repeat(width) + '\n';
+                  for (const staff of staffBreakdown) {
+                      text += `Staff Name: ${staff.name}\n`;
+                      text += this.twoColumns('  Total Sales:', `${symbol}${staff.totalSales.toFixed(2)}`, width) + '\n';
+                      
+                      // Payments
+                      const payList = [];
+                      if (staff.cash > 0) payList.push(`Cash: ${symbol}${staff.cash.toFixed(2)}`);
+                      if (staff.paynow > 0) payList.push(`PayNow: ${symbol}${staff.paynow.toFixed(2)}`);
+                      if (staff.upi > 0) payList.push(`UPI: ${symbol}${staff.upi.toFixed(2)}`);
+                      if (staff.card > 0) payList.push(`Card: ${symbol}${staff.card.toFixed(2)}`);
+                      if (staff.valuecard > 0) payList.push(`Value Card: ${symbol}${staff.valuecard.toFixed(2)}`);
+                      
+                      if (payList.length > 0) {
+                          text += `  - Payments: ${payList.join(', ')}\n`;
+                      }
+    
+                      // Categories
+                      if (staff.categories && Object.keys(staff.categories).length > 0) {
+                          const catList = Object.entries(staff.categories).map(([catName, val]) => `${catName}: ${symbol}${(val as number).toFixed(2)}`);
+                          text += `  - Categories: ${catList.join(', ')}\n`;
+                      }
+    
+                      // Items
+                      if (staff.items && Object.keys(staff.items).length > 0) {
+                          const itemList = Object.entries(staff.items).map(([itemName, data]: any) => `${itemName} (${data.qty}x)`);
+                          text += `  - Items: ${itemList.join(', ')}\n`;
+                      }
+                      text += '-'.repeat(width) + '\n';
                   }
-
-                  // Categories
-                  if (staff.categories && Object.keys(staff.categories).length > 0) {
-                      const catList = Object.entries(staff.categories).map(([catName, val]) => `${catName}: ${symbol}${(val as number).toFixed(2)}`);
-                      text += `  - Categories: ${catList.join(', ')}\n`;
-                  }
-
-                  // Items
-                  if (staff.items && Object.keys(staff.items).length > 0) {
-                      const itemList = Object.entries(staff.items).map(([itemName, data]: any) => `${itemName} (${data.qty}x)`);
-                      text += `  - Items: ${itemList.join(', ')}\n`;
-                  }
-                  text += '-'.repeat(32) + '\n';
               }
-          }
-
-          text += '\n' + '='.repeat(32) + '\n';
-          text += this.centerText('END OF SETTLEMENT', 32) + '\n';
-          text += '='.repeat(32) + '\n\n';
-          text += this.centerText('SMARTRETAIL BY UNIPROSG', 32) + '\n';
-          text += '\n\n';
+    
+              text += '\n' + '='.repeat(width) + '\n';
+              text += this.centerText('END OF SETTLEMENT', width) + '\n';
+              text += '='.repeat(width) + '\n\n';
+              text += this.centerText('SMARTRETAIL BY UNIPROSG', width) + '\n';
+              text += '\n\n';
+              return text;
+          };
 
           if (company.printerEnabled) {
               console.log('🔌 Network printer enabled, printing settlement report...');
-              return await NetworkPrinterService.printRawText(
+              const networkText = this.cleanThermalText(buildText(48));
+              printedOnNetwork = await NetworkPrinterService.printRawText(
                   company.printerIP || '192.168.0.241',
                   company.printerPort || 9100,
-                  text
+                  networkText
               );
           }
 
+          let printedOnSunmi = false;
           const sunmiReady = await SunmiPrinterService.init();
-          if (!sunmiReady) {
-              return false;
+          if (sunmiReady) {
+              const sunmiText = this.cleanThermalText(buildText(32));
+              await SunmiPrinterService.printRawText(sunmiText);
+              await SunmiPrinterService.cutPaper();
+              printedOnSunmi = true;
           }
 
-          await SunmiPrinterService.printRawText(text);
-          await SunmiPrinterService.cutPaper();
-          return true;
+          return printedOnNetwork || printedOnSunmi;
       } catch (e) {
           console.log('Error printing settlement report thermal:', e);
           return false;

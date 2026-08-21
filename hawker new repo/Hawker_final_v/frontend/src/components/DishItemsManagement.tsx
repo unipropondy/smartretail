@@ -274,7 +274,7 @@ useEffect(() => {
 
     if (!isOpenPrice) {
       const price = parseFloat(newDish.price);
-      if (isNaN(price) || price <= 0) {
+      if (isNaN(price) || price < 0) {
         Alert.alert(t.error || 'Error', 'Please enter valid price');
         return false;
       }
