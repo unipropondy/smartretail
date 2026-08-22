@@ -247,6 +247,7 @@ const POSSalesReport: React.FC<Props> = ({
         voidedAt: sale.voidedAt,
         voidedBy: sale.voidedBy,
         discount: sale.discount,
+        staffName: sale.staffName,
         isReprint: true
       };
       

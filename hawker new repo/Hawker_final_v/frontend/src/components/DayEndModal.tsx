@@ -217,6 +217,7 @@ const loadSavedEmail = async () => {
             let totalItems = 0;
             const paymentBreakdown: Record<string, number> = {};
             const categoryMap: Record<string, { items: Record<string, { quantity: number, revenue: number }>, totalRevenue: number, totalQuantity: number }> = {};
+            const staffMap: Record<string, { name: string, revenue: number, txCount: number, payments: Record<string, number>, items: Record<string, { quantity: number, revenue: number, category: string }>, categories: Record<string, number> }> = {};
             
             sales.forEach((sale: any) => {
                 totalSales += sale.total || 0;
@@ -224,6 +225,23 @@ const loadSavedEmail = async () => {
                 
                 const method = sale.paymentMethod || 'Unknown';
                 paymentBreakdown[method] = (paymentBreakdown[method] || 0) + (sale.total || 0);
+                
+                // Staff summary aggregation
+                const staffName = sale.staffName || sale.StaffName || 'Unassigned / Cashier';
+                if (!staffMap[staffName]) {
+                    staffMap[staffName] = {
+                        name: staffName,
+                        revenue: 0,
+                        txCount: 0,
+                        payments: {},
+                        items: {},
+                        categories: {}
+                    };
+                }
+                const staffEntry = staffMap[staffName];
+                staffEntry.revenue += sale.total || 0;
+                staffEntry.txCount += 1;
+                staffEntry.payments[method] = (staffEntry.payments[method] || 0) + (sale.total || 0);
                 
                 if (sale.items) {
                     sale.items.forEach((item: any) => {
@@ -254,6 +272,19 @@ const loadSavedEmail = async () => {
                         categoryMap[category].items[itemName].revenue += revenue;
                         categoryMap[category].totalRevenue += revenue;
                         categoryMap[category].totalQuantity += quantity;
+                        
+                        // Add to staff entry
+                        if (!staffEntry.items[itemName]) {
+                            staffEntry.items[itemName] = {
+                                quantity: 0,
+                                revenue: 0,
+                                category: category
+                            };
+                        }
+                        staffEntry.items[itemName].quantity += quantity;
+                        staffEntry.items[itemName].revenue += revenue;
+                        
+                        staffEntry.categories[category] = (staffEntry.categories[category] || 0) + revenue;
                     });
                 }
             });
@@ -269,6 +300,23 @@ const loadSavedEmail = async () => {
                 })).sort((a, b) => b.revenue - a.revenue)
             })).sort((a, b) => b.totalRevenue - a.totalRevenue);
             
+            const staffSummary = Object.keys(staffMap).map(name => {
+                const entry = staffMap[name];
+                return {
+                    name: entry.name,
+                    revenue: entry.revenue,
+                    txCount: entry.txCount,
+                    payments: entry.payments,
+                    items: Object.keys(entry.items).map(itemName => ({
+                        name: itemName,
+                        quantity: entry.items[itemName].quantity,
+                        revenue: entry.items[itemName].revenue,
+                        category: entry.items[itemName].category
+                    })).sort((a, b) => b.revenue - a.revenue),
+                    categories: entry.categories
+                };
+            }).sort((a, b) => b.revenue - a.revenue);
+            
             setDayEndData({
                 totalSales,
                 totalDiscount,
@@ -276,7 +324,8 @@ const loadSavedEmail = async () => {
                 netSales: totalSales - totalDiscount,
                 paymentBreakdown,
                 salesCount: sales.length,
-                categories: categories
+                categories: categories,
+                staffSummary: staffSummary
             });
             
         } catch (error) {
@@ -388,6 +437,28 @@ const loadSavedEmail = async () => {
             if (cat.items && cat.items.length > 0) {
                 cat.items.forEach((item: any) => {
                     text += `  ${item.name || 'Unknown'} x${item.quantity || 0} = ${symbol}${(item.revenue || 0).toFixed(2)}\n`;
+                });
+            }
+            text += '\n';
+        });
+        text += dash + '\n\n';
+    }
+
+    if (data.staffSummary && data.staffSummary.length > 0) {
+        text += centerText('STAFF BREAKDOWN', width) + '\n';
+        text += dash + '\n';
+        data.staffSummary.forEach((staff: any) => {
+            text += `${staff.name}: ${symbol}${(staff.revenue || 0).toFixed(2)} (${staff.txCount || 0} txs)\n`;
+            if (staff.payments && Object.keys(staff.payments).length > 0) {
+                text += `  Payments:\n`;
+                Object.entries(staff.payments).forEach(([method, amt]) => {
+                    text += `    - ${method}: ${symbol}${(amt as number).toFixed(2)}\n`;
+                });
+            }
+            if (staff.items && staff.items.length > 0) {
+                text += `  Items Sold:\n`;
+                staff.items.forEach((item: any) => {
+                    text += `    - ${item.name || 'Unknown'} x${item.quantity || 0} = ${symbol}${(item.revenue || 0).toFixed(2)}\n`;
                 });
             }
             text += '\n';
@@ -508,6 +579,34 @@ const generateDayEndHTML = (data: any, outletName: string) => {
     </div>
     ` : ''}
     
+    ${data.staffSummary && data.staffSummary.length > 0 ? `
+    <div class="section">
+        <div class="section-title">👤 STAFF BREAKDOWN</div>
+        ${data.staffSummary.map((staff: any) => `
+            <div style="margin-bottom: 15px;">
+                <div class="category-name">${staff.name || 'Unassigned / Cashier'} - ${symbol}${(staff.revenue || 0).toFixed(2)} (${staff.txCount || 0} txs)</div>
+                ${staff.payments && Object.keys(staff.payments).length > 0 ? `
+                    <div style="padding-left: 20px; font-size: 13px; color: #555; margin-bottom: 5px;">
+                        <strong>Payments: </strong>
+                        ${Object.entries(staff.payments).map(([method, amt]) => `${method}: ${symbol}${(amt as number).toFixed(2)}`).join(' | ')}
+                    </div>
+                ` : ''}
+                ${staff.items && staff.items.length > 0 ? `
+                <table>
+                    ${staff.items.map((item: any) => `
+                        <tr>
+                            <td class="item-name">${item.name || 'Unknown Item'}</td>
+                            <td class="amount">x${item.quantity || 0}</td>
+                            <td class="amount">${symbol}${(item.revenue || 0).toFixed(2)}</td>
+                        </tr>
+                    `).join('')}
+                </table>
+                ` : '<div style="padding-left: 20px; color: #999;">No items sold by this staff</div>'}
+            </div>
+        `).join('')}
+    </div>
+    ` : ''}
+    
     <div class="footer">
         <p><strong>SMARTRETAIL BY UNIPROSG</strong></p>
         <p>© ${new Date().getFullYear()} UNIPRO SOFTWARES SG PTE LTD</p>
@@ -533,6 +632,7 @@ const printDayEndReport = async (dayEndData: any) => {
             salesCount: dayEndData.salesCount || 0,
             paymentBreakdown: dayEndData.paymentBreakdown || {},
             categories: dayEndData.categories || [],
+            staffSummary: dayEndData.staffSummary || [],
             closingDate: dayEndData.closingDate || dayEndData.endDate || new Date()
         };
         
@@ -592,6 +692,7 @@ const printDayEndReport = async (dayEndData: any) => {
             salesCount: item.salesCount || 0,  // ✅ FIX: Transactions
             paymentBreakdown: item.paymentBreakdown || {},
             categories: item.categories || [],
+            staffSummary: item.staffSummary || [],
             closingDate: item.createdAt || item.closingDate  // ✅ FIX: Original day end date/time
         };
         
@@ -718,6 +819,26 @@ const printDayEndReport = async (dayEndData: any) => {
         csv += 'No category data\n';
     }
     csv += '\n';
+
+    // ============ STAFF BREAKDOWN ============
+    csv += 'STAFF BREAKDOWN\n';
+    if (item.staffSummary && item.staffSummary.length > 0) {
+        item.staffSummary.forEach((staff: any) => {
+            csv += `${staff.name || 'Unassigned / Cashier'},${symbol}${(staff.revenue || 0).toFixed(2)},${staff.txCount || 0} transactions\n`;
+            if (staff.payments && Object.keys(staff.payments).length > 0) {
+                csv += `  Payments:,`;
+                csv += Object.entries(staff.payments).map(([method, amt]) => `${method}: ${symbol}${(amt as number).toFixed(2)}`).join(' | ') + '\n';
+            }
+            if (staff.items && staff.items.length > 0) {
+                staff.items.forEach((item: any) => {
+                    csv += `  - ${item.name || 'Unknown Item'},x${item.quantity || 0},${symbol}${(item.revenue || 0).toFixed(2)}\n`;
+                });
+            }
+        });
+    } else {
+        csv += 'No staff data\n';
+    }
+    csv += '\n';
     
     // ============ FOOTER ============
     csv += `SMARTRETAIL BY UNIPROSG\n`;
@@ -746,6 +867,7 @@ const sendEmailReport = async (item: any, email: string) => {
             salesCount: item.salesCount || 0,
             paymentBreakdown: item.paymentBreakdown || {},
             categories: item.categories || [],
+            staffSummary: item.staffSummary || [],
             closingDate: item.closingDate,
             outletName: outletName
         };

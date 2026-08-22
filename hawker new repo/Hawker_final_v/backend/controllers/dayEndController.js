@@ -77,7 +77,8 @@ const performDayEnd = async (req, res) => {
                     PaymentMethod,
                     DiscountAmount,
                     ItemsJson,
-                    SaleDate
+                    SaleDate,
+                    StaffName
                 FROM Sales 
                 WHERE OutletId = @outletId 
                   AND (DayEndId IS NULL OR DayEndId = 0)
@@ -102,6 +103,7 @@ const performDayEnd = async (req, res) => {
         let totalItems = 0;
         const paymentBreakdown = {};
         const categoryMap = {};
+        const staffMap = {};
         
         sales.forEach(sale => {
             totalSales += parseFloat(sale.Total) || 0;
@@ -109,6 +111,23 @@ const performDayEnd = async (req, res) => {
             
             const method = sale.PaymentMethod || 'Unknown';
             paymentBreakdown[method] = (paymentBreakdown[method] || 0) + parseFloat(sale.Total) || 0;
+            
+            // Staff summary calculation
+            const staffName = sale.StaffName || 'Unassigned / Cashier';
+            if (!staffMap[staffName]) {
+                staffMap[staffName] = {
+                    name: staffName,
+                    revenue: 0,
+                    txCount: 0,
+                    payments: {},
+                    items: {},
+                    categories: {}
+                };
+            }
+            const staffEntry = staffMap[staffName];
+            staffEntry.revenue += parseFloat(sale.Total) || 0;
+            staffEntry.txCount += 1;
+            staffEntry.payments[method] = (staffEntry.payments[method] || 0) + parseFloat(sale.Total) || 0;
             
             try {
                 let itemsArray = [];
@@ -151,6 +170,20 @@ const performDayEnd = async (req, res) => {
                     categoryMap[category].items[itemName].revenue += revenue;
                     categoryMap[category].totalRevenue += revenue;
                     categoryMap[category].totalQuantity += quantity;
+                    
+                    // Add item breakdown to staff
+                    if (!staffEntry.items[itemName]) {
+                        staffEntry.items[itemName] = {
+                            quantity: 0,
+                            revenue: 0,
+                            category: category
+                        };
+                    }
+                    staffEntry.items[itemName].quantity += quantity;
+                    staffEntry.items[itemName].revenue += revenue;
+                    
+                    // Add category breakdown to staff
+                    staffEntry.categories[category] = (staffEntry.categories[category] || 0) + revenue;
                 });
                 
             } catch (e) {
@@ -171,6 +204,23 @@ const performDayEnd = async (req, res) => {
             }))
         })).sort((a, b) => b.totalRevenue - a.totalRevenue);
         
+        const staffSummaryArray = Object.keys(staffMap).map(name => {
+            const entry = staffMap[name];
+            return {
+                name: entry.name,
+                revenue: entry.revenue,
+                txCount: entry.txCount,
+                payments: entry.payments,
+                items: Object.keys(entry.items).map(itemName => ({
+                    name: itemName,
+                    quantity: entry.items[itemName].quantity,
+                    revenue: entry.items[itemName].revenue,
+                    category: entry.items[itemName].category
+                })).sort((a, b) => b.revenue - a.revenue),
+                categories: entry.categories
+            };
+        }).sort((a, b) => b.revenue - a.revenue);
+        
         // ✅✅✅ GET SINGAPORE TIME ✅✅✅
 const transaction = pool.transaction();
         await transaction.begin();
@@ -187,18 +237,19 @@ const transaction = pool.transaction();
                 .input('netSales', sql.Decimal(10,2), netSales)
                 .input('paymentBreakdown', sql.NVarChar, JSON.stringify(paymentBreakdown))
                 .input('categories', sql.NVarChar, JSON.stringify(categoriesArray))
+                .input('staffSummary', sql.NVarChar, JSON.stringify(staffSummaryArray))
                 .query(`
                     INSERT INTO DayEndLogs (
                         OutletId, ClosedBy, OpeningDate, ClosingDate,
                         TotalSales, TotalDiscount, TotalItems, NetSales, 
-                        PaymentBreakdown, Categories, CreatedAt
+                        PaymentBreakdown, Categories, StaffSummary, CreatedAt
                     )
                     OUTPUT INSERTED.Id
                     VALUES (
                         @outletId, @closedBy, @openingDate, 
                         GETDATE(),  -- ✅ ClosingDate = Current Server Time
                         @totalSales, @totalDiscount, @totalItems, @netSales,
-                        @paymentBreakdown, @categories, 
+                        @paymentBreakdown, @categories, @staffSummary,
                         GETDATE()   -- ✅ CreatedAt = Current Server Time
                     )
                 `);
@@ -244,6 +295,7 @@ const transaction = pool.transaction();
                     netSales,
                     paymentBreakdown,
                     categories: categoriesArray,
+                    staffSummary: staffSummaryArray,
                     salesCount: sales.length,
                     startDate: sales[0]?.SaleDate,
                     endDate: (() => {
@@ -324,6 +376,7 @@ const getDayEndHistory = async (req, res) => {
                     d.NetSales,
                     d.PaymentBreakdown,
                     d.Categories,
+                    d.StaffSummary,
                     d.CreatedAt,
                     u.Username as ClosedByName,
                     -- ✅ ADD sales count
@@ -347,6 +400,7 @@ const getDayEndHistory = async (req, res) => {
                 salesCount: row.SalesCount || 0,  // ✅ ADD THIS
                 paymentBreakdown: JSON.parse(row.PaymentBreakdown || '{}'),
                 categories: JSON.parse(row.Categories || '[]'),
+                staffSummary: JSON.parse(row.StaffSummary || '[]'),
                 closedBy: row.ClosedByName,
                 createdAt: row.CreatedAt
             }))
