@@ -45,7 +45,8 @@ const DayEndModal: React.FC<DayEndModalProps> = ({
         netSales: 0,
         paymentBreakdown: {},
         salesCount: 0,
-        categories: []
+        categories: [],
+        staffSummary: []
     });
     const [dayEndStatus, setDayEndStatus] = useState<any>(null);
     const [isDayEnded, setIsDayEnded] = useState(false);
@@ -54,6 +55,8 @@ const DayEndModal: React.FC<DayEndModalProps> = ({
     const [selectedHistory, setSelectedHistory] = useState<any>(null);
     const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
     const [expandedHistoryCategory, setExpandedHistoryCategory] = useState<string | null>(null);
+    const [expandedStaff, setExpandedStaff] = useState<string | null>(null);
+    const [expandedHistoryStaff, setExpandedHistoryStaff] = useState<string | null>(null);
     
     // ✅ Email State
     const [showEmailModal, setShowEmailModal] = useState(false);
@@ -125,6 +128,7 @@ const loadSavedEmail = async () => {
                 let totalItems = 0;
                 const paymentBreakdown: Record<string, number> = {};
                 const categoryMap: Record<string, { items: Record<string, { quantity: number, revenue: number }>, totalRevenue: number, totalQuantity: number }> = {};
+                const staffMap: Record<string, { name: string, revenue: number, txCount: number, payments: Record<string, number>, items: Record<string, { quantity: number, revenue: number, category: string }>, categories: Record<string, number> }> = {};
                 
                 sales.forEach((sale: any) => {
                     totalSales += sale.total || 0;
@@ -132,6 +136,23 @@ const loadSavedEmail = async () => {
                     
                     const method = sale.paymentMethod || 'Unknown';
                     paymentBreakdown[method] = (paymentBreakdown[method] || 0) + (sale.total || 0);
+                    
+                    // Staff summary aggregation
+                    const staffName = sale.staffName || sale.StaffName || 'Unassigned / Cashier';
+                    if (!staffMap[staffName]) {
+                        staffMap[staffName] = {
+                            name: staffName,
+                            revenue: 0,
+                            txCount: 0,
+                            payments: {},
+                            items: {},
+                            categories: {}
+                        };
+                    }
+                    const staffEntry = staffMap[staffName];
+                    staffEntry.revenue += sale.total || 0;
+                    staffEntry.txCount += 1;
+                    staffEntry.payments[method] = (staffEntry.payments[method] || 0) + (sale.total || 0);
                     
                     if (sale.items) {
                         sale.items.forEach((item: any) => {
@@ -162,6 +183,19 @@ const loadSavedEmail = async () => {
                             categoryMap[category].items[itemName].revenue += revenue;
                             categoryMap[category].totalRevenue += revenue;
                             categoryMap[category].totalQuantity += quantity;
+                            
+                            // Add to staff entry
+                            if (!staffEntry.items[itemName]) {
+                                staffEntry.items[itemName] = {
+                                    quantity: 0,
+                                    revenue: 0,
+                                    category: category
+                                };
+                            }
+                            staffEntry.items[itemName].quantity += quantity;
+                            staffEntry.items[itemName].revenue += revenue;
+                            
+                            staffEntry.categories[category] = (staffEntry.categories[category] || 0) + revenue;
                         });
                     }
                 });
@@ -177,6 +211,26 @@ const loadSavedEmail = async () => {
                     })).sort((a, b) => b.revenue - a.revenue)
                 })).sort((a, b) => b.totalRevenue - a.totalRevenue);
                 
+                const staffSummary = Object.keys(staffMap).map(name => {
+                    const entry = staffMap[name];
+                    return {
+                        name: entry.name,
+                        revenue: entry.revenue,
+                        txCount: entry.txCount,
+                        payments: entry.payments,
+                        items: Object.keys(entry.items).map(itemName => ({
+                            name: itemName,
+                            quantity: entry.items[itemName].quantity,
+                            revenue: entry.items[itemName].revenue,
+                            category: entry.items[itemName].category
+                        })).sort((a, b) => b.revenue - a.revenue),
+                        categories: entry.categories
+                    };
+                }).sort((a, b) => b.revenue - a.revenue);
+                
+                console.log('📊 Sales loaded for Day End (First Block):', JSON.stringify(sales, null, 2));
+                console.log('📊 staffSummary computed (First Block):', JSON.stringify(staffSummary, null, 2));
+                
                 setDayEndData({
                     totalSales,
                     totalDiscount,
@@ -184,7 +238,8 @@ const loadSavedEmail = async () => {
                     netSales: totalSales - totalDiscount,
                     paymentBreakdown,
                     salesCount: sales.length,
-                    categories: categories
+                    categories: categories,
+                    staffSummary: staffSummary
                 });
                 
                 setLoading(false);
@@ -201,7 +256,8 @@ const loadSavedEmail = async () => {
                     netSales: 0,
                     paymentBreakdown: {},
                     salesCount: 0,
-                    categories: []
+                    categories: [],
+                    staffSummary: []
                 });
                 setLoading(false);
                 return;
@@ -316,6 +372,9 @@ const loadSavedEmail = async () => {
                     categories: entry.categories
                 };
             }).sort((a, b) => b.revenue - a.revenue);
+            
+            console.log('📊 Sales loaded for Day End:', JSON.stringify(sales, null, 2));
+            console.log('📊 staffSummary computed:', JSON.stringify(staffSummary, null, 2));
             
             setDayEndData({
                 totalSales,
@@ -1055,7 +1114,8 @@ const sendEmailReport = async (item: any, email: string) => {
                     netSales: 0,
                     paymentBreakdown: {},
                     salesCount: 0,
-                    categories: []
+                    categories: [],
+                    staffSummary: []
                 });
                 
                 await loadDayEndHistory();
@@ -1250,6 +1310,84 @@ const sendEmailReport = async (item: any, email: string) => {
                                             ))}
                                         </View>
                                     )}
+                                    {item.staffSummary && item.staffSummary.length > 0 && (
+                                        <View style={[styles.historyCategoriesCard, { marginTop: 15 }]}>
+                                            <Text style={[styles.historyCategoriesTitle, { color: theme.text }]}>
+                                                👤 Staff Breakdown
+                                            </Text>
+                                            
+                                            {item.staffSummary.map((staff: any, staffIdx: number) => (
+                                                <View key={`history-staff-${staffIdx}`} style={styles.historyCategoryItem}>
+                                                    <TouchableOpacity
+                                                        style={styles.historyCategoryHeader}
+                                                        onPress={() => setExpandedHistoryStaff(
+                                                            expandedHistoryStaff === `${item.id}-${staff.name}` 
+                                                                ? null 
+                                                                : `${item.id}-${staff.name}`
+                                                        )}
+                                                        activeOpacity={0.7}
+                                                    >
+                                                        <View style={styles.historyCategoryHeaderLeft}>
+                                                            <Text style={[styles.historyCategoryName, { color: theme.text }]}>
+                                                                {staff.name}
+                                                            </Text>
+                                                            <View style={[styles.historyCategoryBadge, { backgroundColor: theme.primary + '20' }]}>
+                                                                <Text style={[styles.historyCategoryBadgeText, { color: theme.primary }]}>
+                                                                    {staff.txCount} txs
+                                                                </Text>
+                                                            </View>
+                                                        </View>
+                                                        <View style={styles.historyCategoryHeaderRight}>
+                                                            <Text style={[styles.historyCategoryTotal, { color: theme.primary }]}>
+                                                                {formatPrice(staff.revenue)}
+                                                            </Text>
+                                                            <Ionicons 
+                                                                name={expandedHistoryStaff === `${item.id}-${staff.name}` ? "chevron-up" : "chevron-down"} 
+                                                                size={18} 
+                                                                color={theme.textSecondary} 
+                                                            />
+                                                        </View>
+                                                    </TouchableOpacity>
+                                                    
+                                                    {expandedHistoryStaff === `${item.id}-${staff.name}` && (
+                                                        <View style={styles.historyCategoryItemsList}>
+                                                            {staff.payments && Object.keys(staff.payments).length > 0 && (
+                                                                <View style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.border + '50', marginBottom: 5 }}>
+                                                                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.textSecondary, marginBottom: 2 }}>Payments:</Text>
+                                                                    {Object.entries(staff.payments).map(([method, amount]: any, pIdx: number) => (
+                                                                        <View key={pIdx} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 }}>
+                                                                            <Text style={{ fontSize: 12, color: theme.text }}>{method}</Text>
+                                                                            <Text style={{ fontSize: 12, color: theme.primary, fontWeight: '600' }}>{formatPrice(amount)}</Text>
+                                                                        </View>
+                                                                    ))}
+                                                                </View>
+                                                            )}
+                                                            {staff.items && staff.items.length > 0 && (
+                                                                <>
+                                                                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.textSecondary, marginTop: 5, marginBottom: 2 }}>Items Sold:</Text>
+                                                                    {staff.items.map((staffItem: any, idx: number) => (
+                                                                        <View key={`history-staff-item-${idx}`} style={styles.historyCategoryItemRow}>
+                                                                            <View style={styles.historyCategoryItemLeft}>
+                                                                                <Text style={[styles.historyCategoryItemName, { color: theme.text }]}>
+                                                                                    {staffItem.name}
+                                                                                </Text>
+                                                                                <Text style={[styles.historyCategoryItemQty, { color: theme.textSecondary }]}>
+                                                                                    x{staffItem.quantity}
+                                                                                </Text>
+                                                                            </View>
+                                                                            <Text style={[styles.historyCategoryItemRevenue, { color: theme.primary }]}>
+                                                                                {formatPrice(staffItem.revenue)}
+                                                                            </Text>
+                                                                        </View>
+                                                                    ))}
+                                                                </>
+                                                            )}
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
 
                                     {item.paymentBreakdown && Object.keys(item.paymentBreakdown).length > 0 && (
                                         <View style={styles.historyPaymentBreakdown}>
@@ -1369,6 +1507,87 @@ const sendEmailReport = async (item: any, email: string) => {
         );
     };
 
+    const renderStaffBreakdown = () => {
+        if (!dayEndData.staffSummary || dayEndData.staffSummary.length === 0) {
+            return null;
+        }
+
+        return (
+            <View style={[styles.categoriesCard, { backgroundColor: theme.surface, marginTop: 15 }]}>
+                <Text style={[styles.categoriesTitle, { color: theme.text }]}>
+                    👤 Staff Breakdown
+                </Text>
+                
+                {dayEndData.staffSummary.map((staff: any, index: number) => (
+                    <View key={`staff-${index}`} style={styles.categoryItem}>
+                        <TouchableOpacity
+                            style={styles.categoryHeader}
+                            onPress={() => setExpandedStaff(expandedStaff === staff.name ? null : staff.name)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.categoryHeaderLeft}>
+                                <Text style={[styles.categoryName, { color: theme.text }]}>
+                                    {staff.name}
+                                </Text>
+                                <View style={[styles.categoryBadge, { backgroundColor: theme.primary + '20' }]}>
+                                    <Text style={[styles.categoryBadgeText, { color: theme.primary }]}>
+                                        {staff.txCount} txs
+                                    </Text>
+                                </View>
+                            </View>
+                            <View style={styles.categoryHeaderRight}>
+                                <Text style={[styles.categoryTotal, { color: theme.primary }]}>
+                                    {formatPrice(staff.revenue)}
+                                </Text>
+                                <Ionicons 
+                                    name={expandedStaff === staff.name ? "chevron-up" : "chevron-down"} 
+                                    size={20} 
+                                    color={theme.textSecondary} 
+                                />
+                            </View>
+                        </TouchableOpacity>
+                        
+                        {expandedStaff === staff.name && (
+                            <View style={styles.categoryItemsList}>
+                                {staff.payments && Object.keys(staff.payments).length > 0 && (
+                                    <View style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.border + '50', marginBottom: 5 }}>
+                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.textSecondary, marginBottom: 2 }}>Payments:</Text>
+                                        {Object.entries(staff.payments).map(([method, amount]: any, pIdx: number) => (
+                                            <View key={pIdx} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 }}>
+                                                <Text style={{ fontSize: 12, color: theme.text }}>{method}</Text>
+                                                <Text style={{ fontSize: 12, color: theme.primary, fontWeight: '600' }}>{formatPrice(amount)}</Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
+                                {staff.items && staff.items.length > 0 && (
+                                    <>
+                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.textSecondary, marginTop: 5, marginBottom: 2 }}>Items Sold:</Text>
+                                        {staff.items.map((item: any, idx: number) => (
+                                            <View key={`staff-item-${idx}`} style={styles.categoryItemRow}>
+                                                <View style={styles.categoryItemLeft}>
+                                                    <Text style={[styles.categoryItemName, { color: theme.text }]}>
+                                                        {item.name}
+                                                    </Text>
+                                                    <Text style={[styles.categoryItemQty, { color: theme.textSecondary }]}>
+                                                        x{item.quantity}
+                                                    </Text>
+                                                </View>
+                                                <Text style={[styles.categoryItemRevenue, { color: theme.primary }]}>
+                                                    {formatPrice(item.revenue)}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </>
+                                )}
+                            </View>
+                        )}
+                    </View>
+                ))}
+            </View>
+        );
+    };
+
     const renderPendingTab = () => {
         if (isDayEnded && dayEndData.salesCount === 0) {
             return (
@@ -1436,6 +1655,8 @@ const sendEmailReport = async (item: any, email: string) => {
                 )}
 
                 {renderCategories()}
+
+                {renderStaffBreakdown()}
 
                 <View style={styles.buttonContainer}>
                     <TouchableOpacity

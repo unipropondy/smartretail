@@ -69,7 +69,53 @@ class UniversalPrinter {
     }
   }
 
-  static async openCashDrawer(): Promise<boolean> {
+  static async openCashDrawer(userId?: string | number): Promise<boolean> {
+    try {
+      // 1. Try network printer drawer kick if enabled
+      try {
+        const company = await BillPDFGenerator.loadSettings(userId);
+        if (company && company.printerEnabled && company.printerIP) {
+          console.log(`🔌 Network printer enabled, kicking cash drawer via TCP socket at ${company.printerIP}:${company.printerPort || 9100}...`);
+          // Combined commands to support different printer types and pins:
+          // - Pin 2 standard: \x1B\x70\x00\x19\xFA (ESC p 0 25 250)
+          // - Pin 5 standard: \x1B\x70\x01\x19\xFA (ESC p 1 25 250)
+          // - Xprinter/Epson Real-time Pin 2: \x10\x14\x01\x00\x05 (DLE DC4 1 0 5)
+          // - Xprinter/Epson Real-time Pin 5: \x10\x14\x01\x01\x05 (DLE DC4 1 1 5)
+          // - Star Micronics: \x1B\x07 (ESC BEL)
+          // - Rongta/Xprinter alternative Pin 2: \x1B\x70\x00\x32\x32
+          // - Rongta/Xprinter alternative Pin 5: \x1B\x70\x01\x32\x32
+          const combinedKick = 
+            '\x1B\x70\x00\x19\xFA' + 
+            '\x1B\x70\x01\x19\xFA' + 
+            '\x10\x14\x01\x00\x05' + 
+            '\x10\x14\x01\x01\x05' + 
+            '\x1B\x07' + 
+            '\x1B\x70\x00\x32\x32' +
+            '\x1B\x70\x01\x32\x32';
+          
+          // Use sendRawBytes instead of printRawText to avoid appending a paper cut command!
+          const sent = await NetworkPrinterService.sendRawBytes(
+            company.printerIP,
+            company.printerPort || 9100,
+            combinedKick
+          );
+          if (sent) {
+            console.log('✅ Sent cash drawer kick command to network printer.');
+            return true;
+          }
+        }
+      } catch (netErr) {
+        console.log('Error opening network printer drawer:', netErr);
+      }
+
+      // 2. Fallback to local Android cash drawer if available
+      return await this.openLocalCashDrawer();
+    } catch (error) {
+      return false;
+    }
+  }
+
+  private static async openLocalCashDrawer(): Promise<boolean> {
     try {
       if (Platform.OS === 'android') {
         try {
@@ -256,10 +302,60 @@ static async smartPrint(
 ): Promise<boolean> {
   try {
     const company = await BillPDFGenerator.loadSettings(outletId);
+    // Check if it is a cash payment
     let printedOnNetwork = false;
+    let isCash = false;
+    try {
+      const pm = (saleData?.paymentMethod || '').toLowerCase();
+      isCash = pm.includes('cash') || 
+               pm.includes('现金') || 
+               pm.includes('tunai') || 
+               pm.includes('பணம்') || 
+               pm.includes('नकद') ||
+               (t && t.cash && pm.includes(t.cash.toLowerCase())) ||
+               (saleData?.cashPaid && Number(saleData.cashPaid) > 0) ||
+               (!pm.includes('card') && !pm.includes('paynow') && !pm.includes('nets') && !pm.includes('upi') && !pm.includes('grabpay') && !pm.includes('cdc') && pm !== '');
+
+      if (isCash && !isReprint) {
+        if (company.printerEnabled) {
+          // Do NOT call openCashDrawer/openLocalCashDrawer here,
+          // because the combinedKick is prepended to the network print job below!
+          console.log('💰 Network printer enabled. Cash drawer kick will be sent with the print job.');
+        } else {
+          console.log('💰 Local cash payment detected, opening local cash drawer...');
+          await this.openLocalCashDrawer();
+        }
+      }
+    } catch (drawerErr) {
+      console.log('Error opening cash drawer in smartPrint:', drawerErr);
+    }
+
     if (company.printerEnabled) {
       console.log('🔌 Network printer enabled, printing receipt...');
-      const text = this.formatThermalTextWithDiscount(saleData, company, discountInfo, 48);
+      let text = this.formatThermalTextWithDiscount(saleData, company, discountInfo, 48);
+      
+      // If cash payment and not a reprint, prepend the kick drawer command to the print job
+      if (isCash && !isReprint) {
+        console.log('💰 Prepending combined LAN/WiFi cash drawer kick commands...');
+        // Combined commands to support different printer types and pins:
+        // - Pin 2 standard: \x1B\x70\x00\x19\xFA (ESC p 0 25 250)
+        // - Pin 5 standard: \x1B\x70\x01\x19\xFA (ESC p 1 25 250)
+        // - Xprinter/Epson Real-time Pin 2: \x10\x14\x01\x00\x05 (DLE DC4 1 0 5)
+        // - Xprinter/Epson Real-time Pin 5: \x10\x14\x01\x01\x05 (DLE DC4 1 1 5)
+        // - Star Micronics: \x1B\x07 (ESC BEL)
+        // - Rongta/Xprinter alternative Pin 2: \x1B\x70\x00\x32\x32
+        // - Rongta/Xprinter alternative Pin 5: \x1B\x70\x01\x32\x32
+        const combinedKick = 
+          '\x1B\x70\x00\x19\xFA' + 
+          '\x1B\x70\x01\x19\xFA' + 
+          '\x10\x14\x01\x00\x05' + 
+          '\x10\x14\x01\x01\x05' + 
+          '\x1B\x07' + 
+          '\x1B\x70\x00\x32\x32' +
+          '\x1B\x70\x01\x32\x32';
+        text = combinedKick + text;
+      }
+
       printedOnNetwork = await NetworkPrinterService.printRawText(
         company.printerIP || '192.168.0.241',
         company.printerPort || 9100,
@@ -267,11 +363,13 @@ static async smartPrint(
       );
     }
 
-    // ✅ Auto-detect printer type and print on Sunmi as well
+    // ✅ Auto-detect printer type and print on Sunmi as well (only if not already printed on network)
     let printedOnSunmi = false;
-    const printerType = await PrinterDetector.detectPrinter();
-    if (printerType === 'sunmi') {
-      printedOnSunmi = await this.printThermalReceipt(saleData, outletId, undefined, discountInfo);
+    if (!printedOnNetwork) {
+      const printerType = await PrinterDetector.detectPrinter();
+      if (printerType === 'sunmi') {
+        printedOnSunmi = await this.printThermalReceipt(saleData, outletId, undefined, discountInfo);
+      }
     }
     
     if (printedOnNetwork || printedOnSunmi) {
@@ -296,16 +394,6 @@ private static async printThermalReceipt(
   try {
     const company = await BillPDFGenerator.loadSettings(userId);
     let printedOnNetwork = false;
-
-    if (company.printerEnabled) {
-      console.log('🔌 Network printer enabled, printing thermal receipt...');
-      const text = this.formatThermalTextWithDiscount(saleData, company, discountInfo, 48);
-      printedOnNetwork = await NetworkPrinterService.printRawText(
-        company.printerIP || '192.168.0.241',
-        company.printerPort || 9100,
-        text
-      );
-    }
 
     // ✅ Try Sunmi direct print (NO preview)
     let printedOnSunmi = false;
@@ -380,8 +468,13 @@ private static async printThermalReceipt(
       return line;
     };
 
-    let text = '\n' + '='.repeat(width) + '\n';
-    text += center(company.name || 'YOUR STORE') + '\n';
+    const boldOn = '\x1B\x45\x01';
+    const boldOff = '\x1B\x45\x00';
+    const doubleHeightOn = '\x1D\x21\x01'; // Double height, normal width
+    const doubleHeightOff = '\x1D\x21\x00'; // Reset size
+
+    let text = '-'.repeat(width) + '\n';
+    text += doubleHeightOn + boldOn + center(company.name || 'YOUR STORE') + boldOff + doubleHeightOff + '\n';
     
     if (company.address) {
       const addressLines = company.address.split('\n');
@@ -481,7 +574,7 @@ private static async printThermalReceipt(
     }
     
     // Grand Total
-    text += twoCols('GRAND TOTAL:', `${symbol}${subtotal.toFixed(2)}`) + '\n';
+    text += doubleHeightOn + boldOn + twoCols('GRAND TOTAL:', `${symbol}${subtotal.toFixed(2)}`) + boldOff + doubleHeightOff + '\n';
     text += '='.repeat(width) + '\n';
     
     // Payment
@@ -502,7 +595,7 @@ private static async printThermalReceipt(
     if (company.gstPercentage > 0) {
       text += center(`* Prices include ${company.gstPercentage}% GST`) + '\n';
     }
-    text += '\n\n';
+    text += '\n';
     return text;
   }
 
@@ -620,7 +713,7 @@ static async printSalesReportThermal(reportData: any, userId?: string | number, 
               return `${day}/${month}/${year} ${hours}:${minutes}`;
             };
 
-            let text = '\n';
+            let text = '';
             text += '='.repeat(width) + '\n';
             text += this.centerText(company.name || 'SALES REPORT', width) + '\n';
             text += '='.repeat(width) + '\n';
@@ -752,9 +845,9 @@ static async printSalesReportThermal(reportData: any, userId?: string | number, 
             
             text += '\n' + '='.repeat(width) + '\n';
             text += this.centerText('END OF REPORT', width) + '\n';
-            text += '='.repeat(width) + '\n\n';
+            text += '='.repeat(width) + '\n';
             text += this.centerText('SMARTRETAIL BY UNIPROSG', width) + '\n';
-            text += '\n\n';
+            text += '\n';
             return text;
         };
         
@@ -814,7 +907,7 @@ static async printCategoryReportThermal(
               return `${day}/${month}/${year} ${hours}:${minutes}`;
             };
 
-            let text = '\n';
+            let text = '';
             text += '='.repeat(width) + '\n';
             text += this.centerText(company.name || 'CATEGORY REPORT', width) + '\n';
             text += '='.repeat(width) + '\n';
@@ -920,7 +1013,7 @@ static async printCategoryReportThermal(
             
             text += '\n' + '='.repeat(width) + '\n';
             text += this.centerText('END OF REPORT', width) + '\n';
-            text += '='.repeat(width) + '\n\n';
+            text += '='.repeat(width) + '\n';
             text += this.centerText('SMARTRETAIL BY UNIPROSG', width) + '\n';
             return text;
         };

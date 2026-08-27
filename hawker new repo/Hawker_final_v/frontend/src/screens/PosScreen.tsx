@@ -3403,23 +3403,8 @@ export default function PosScreen() {
         }
       }
 
-      // Open cash drawer
-      const drawerOpened = await UniversalPrinter.openCashDrawer();
-
+      // Cash drawer will only open when printing the receipt from the bill prompt
       let drawerLogId = null;
-      if (drawerOpened) {
-        try {
-          const drawerResponse = await API.post('/cash-drawer/open', {
-            totalAmount: totalAmount,
-            paymentMethod: isSecondPayment ? 'Value Card + Cash' : 'Cash',
-            notes: isSecondPayment ? 'Cash payment after value card' : 'Cash payment'
-          });
-          drawerLogId = drawerResponse.data.log?.Id;
-          console.log('💰 Drawer opened and logged');
-        } catch (drawerError) {
-          console.log('Drawer log failed');
-        }
-      }
 
       // Create sale data
       const saleData: any = {
@@ -4232,10 +4217,43 @@ export default function PosScreen() {
       amount: discountInfo.amount
     } : undefined;
 
-    console.log('🔴 STEP 5: discountData =', discountData);
     setPrinting(true);
     // ✅ NEW: Get printer settings from AsyncStorage or API
     try {
+      // Open cash drawer only if cash payment (checking translation strings and cashPaid > 0)
+      const isCash = pendingSaleData && (
+        (pendingSaleData.paymentMethod && (
+          pendingSaleData.paymentMethod.toLowerCase().includes('cash') ||
+          pendingSaleData.paymentMethod.includes('现金') ||
+          pendingSaleData.paymentMethod.includes('Tunai') ||
+          pendingSaleData.paymentMethod.includes('பணம்') ||
+          pendingSaleData.paymentMethod.includes('नकद') ||
+          (t && t.cash && pendingSaleData.paymentMethod === t.cash)
+        )) ||
+        (pendingSaleData.cashPaid && Number(pendingSaleData.cashPaid) > 0)
+      );
+
+      if (isCash) {
+        console.log('💰 Cash payment detected, logging cash drawer open...');
+        try {
+          const drawerResponse = await API.post('/cash-drawer/open', {
+            totalAmount: pendingSaleData.total,
+            paymentMethod: pendingSaleData.paymentMethod,
+            notes: 'Cash payment - printed receipt',
+            saleId: pendingSaleData.id
+          });
+          const drawerLogId = drawerResponse.data.log?.Id;
+          if (drawerLogId) {
+            await API.put(`/cash-drawer/${drawerLogId}`, {
+              saleId: pendingSaleData.id,
+              totalAmount: pendingSaleData.total
+            });
+          }
+        } catch (drawerError) {
+          console.log('Drawer log failed during print:', drawerError);
+        }
+      }
+
       console.log('🔴 STEP 6: Calling UniversalPrinter.smartPrint...');
       const printed = await UniversalPrinter.smartPrint(
         pendingSaleData,

@@ -64,7 +64,7 @@ class NetworkPrinterService {
           const initCmd = '\x1B\x40';
           const cutCmd = '\x1D\x56\x42\x00';
           
-          client.write(initCmd + text + '\n\n\n\n' + cutCmd);
+          client.write(initCmd + text + '\n' + cutCmd);
           
           // Small delay before closing socket to ensure all buffers flush
           setTimeout(() => {
@@ -92,6 +92,48 @@ class NetworkPrinterService {
           resolve(false);
         }
       }, 5000);
+    });
+  }
+  
+  static async sendRawBytes(ip: string, port: number, data: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const targetPort = port || 9100;
+      const targetIp = ip.trim();
+      
+      console.log(`🔌 Sending raw bytes to ${targetIp}:${targetPort}`);
+      
+      const client = TcpSocket.createConnection(
+        { port: targetPort, host: targetIp, localAddress: '0.0.0.0', reuseAddress: true },
+        () => {
+          console.log('✅ Connected to printer, writing raw bytes');
+          resolved = true;
+          client.write(data);
+          
+          setTimeout(() => {
+            client.destroy();
+            resolve(true);
+          }, 300);
+        }
+      );
+      
+      client.on('error', (error) => {
+        console.log('❌ Error writing raw bytes:', error);
+        if (!resolved) {
+          resolved = true;
+          client.destroy();
+          resolve(false);
+        }
+      });
+      
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          console.log('❌ Timeout writing raw bytes');
+          client.destroy();
+          resolve(false);
+        }
+      }, 3000);
     });
   }
 }

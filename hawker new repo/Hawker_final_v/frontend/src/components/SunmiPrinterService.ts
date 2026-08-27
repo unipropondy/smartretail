@@ -138,9 +138,39 @@ private static async center(text: string): Promise<void> {
     line += right.substring(0, 12).padStart(12, ' ');
     await printText(line);
   }
+
+  // Center Bold text with custom size
+  private static async centerBold(text: string, size: number = 28): Promise<void> {
+    const maxWidth = Math.floor(32 * (24 / size));
+    let displayText = text;
+    if (displayText.length > maxWidth) {
+      displayText = displayText.substring(0, maxWidth - 3) + '...';
+    }
+    const padding = Math.max(0, Math.floor((maxWidth - displayText.length) / 2));
+    const centeredText = ' '.repeat(padding) + displayText;
+    if (printTextWithSize) {
+      await printTextWithSize(centeredText, size);
+    } else {
+      await printText(centeredText);
+    }
+  }
+
+  // Two Columns Bold text with custom size
+  private static async twoColsBold(left: string, right: string, size: number = 28): Promise<void> {
+    const totalChars = Math.floor(32 * (24 / size));
+    const leftWidth = Math.floor(totalChars * 0.6);
+    const rightWidth = totalChars - leftWidth;
+    let line = left.substring(0, leftWidth).padEnd(leftWidth, ' ');
+    line += right.substring(0, rightWidth).padStart(rightWidth, ' ');
+    if (printTextWithSize) {
+      await printTextWithSize(line, size);
+    } else {
+      await printText(line);
+    }
+  }
   
   // Four columns for items (ITEM, QTY, PRICE, TOTAL)
- private static async itemRow(name: string, qty: string, price: string, total: string): Promise<void> {
+  private static async itemRow(name: string, qty: string, price: string, total: string): Promise<void> {
     const nameWidth = 12;
     const qtyWidth = 3;      // ✅ 5 chars for QTY (including space)
     const priceWidth = 6;     // ✅ 6 chars for PRICE
@@ -155,7 +185,7 @@ private static async center(text: string): Promise<void> {
 }
   
   // Item header
- private static async itemHeader(): Promise<void> {
+  private static async itemHeader(): Promise<void> {
     let line = 'ITEM'.padEnd(12, ' ');
     line += 'QTY'.padStart(3, ' ');   // ✅ 5 chars
     line += 'PRICE'.padStart(6, ' ');
