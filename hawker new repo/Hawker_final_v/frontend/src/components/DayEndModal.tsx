@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     View, Text, Modal, ScrollView, TouchableOpacity,
     StyleSheet, ActivityIndicator, Alert, FlatList,
-    StatusBar, TextInput
+    StatusBar, TextInput, Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ import API from '../api';
 import SunmiPrinterService from './SunmiPrinterService';
 import BillPDFGenerator from './BillPDFGenerator';
 import NetworkPrinterService from './NetworkPrinterService';
+import UniversalPrinter from './UniversalPrinter';
 
 
 interface DayEndModalProps {
@@ -1233,6 +1234,12 @@ const DayEndModal: React.FC<DayEndModalProps> = ({
 
             console.log('📅 Report closingDate:', reportData.closingDate);
 
+            if ((Platform.OS as string) === 'web') {
+                const html = generateDayEndHTML(reportData, outletName);
+                await UniversalPrinter.downloadPDFWeb(html, `dayend_report_${Date.now()}.pdf`);
+                return;
+            }
+
             // Check network printer
             const company = await BillPDFGenerator.loadSettings();
             let printedOnNetwork = false;
@@ -1262,8 +1269,19 @@ const DayEndModal: React.FC<DayEndModalProps> = ({
             if (!printedOnNetwork && !printedOnSunmi) {
                 console.log('⚠️ No printer available, saving as PDF');
                 const html = generateDayEndHTML(reportData, outletName);
-                const { uri } = await Print.printToFileAsync({ html });
-                await Sharing.shareAsync(uri);
+                if (Platform.OS === 'web') {
+                    const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `dayend_report_${Date.now()}.html`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } else {
+                    const { uri } = await Print.printToFileAsync({ html });
+                    await Sharing.shareAsync(uri);
+                }
             }
 
         } catch (error) {
@@ -1305,6 +1323,13 @@ const DayEndModal: React.FC<DayEndModalProps> = ({
                 closedBy: username || item.closedBy || 'Admin'
             };
 
+            if ((Platform.OS as string) === 'web') {
+                const html = generateDayEndHTML(reportData, outletName);
+                await UniversalPrinter.downloadPDFWeb(html, `dayend_report_${Date.now()}.pdf`);
+                Alert.alert('📄 PDF Downloaded', 'Report downloaded successfully');
+                return;
+            }
+
             // Check network printer
             const company = await BillPDFGenerator.loadSettings();
             let printedOnNetwork = false;
@@ -1344,9 +1369,21 @@ const DayEndModal: React.FC<DayEndModalProps> = ({
             } else {
                 console.log('⚠️ No printer available, saving as PDF');
                 const html = generateDayEndHTML(reportData, outletName);
-                const { uri } = await Print.printToFileAsync({ html });
-                await Sharing.shareAsync(uri);
-                Alert.alert('📄 PDF Saved', 'Report saved as PDF');
+                if (Platform.OS === 'web') {
+                    const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `dayend_report_${Date.now()}.html`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    Alert.alert('📄 HTML Downloaded', 'Report downloaded successfully');
+                } else {
+                    const { uri } = await Print.printToFileAsync({ html });
+                    await Sharing.shareAsync(uri);
+                    Alert.alert('📄 PDF Saved', 'Report saved as PDF');
+                }
             }
 
         } catch (error) {
@@ -1497,20 +1534,24 @@ const DayEndModal: React.FC<DayEndModalProps> = ({
 
             // ✅ Generate PDF
             const html = generateDayEndHTML(reportData, outletName);
-            const pdfUri = await Print.printToFileAsync({ html });
-
-            // ✅ Read PDF as base64
-            const response = await fetch(pdfUri.uri);
-            const blob = await response.blob();
-            const pdfBase64 = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const result = reader.result as string;
-                    const base64 = result.split(',')[1];
-                    resolve(base64);
-                };
-                reader.readAsDataURL(blob);
-            });
+            let pdfBase64 = '';
+            if ((Platform.OS as string) === 'web') {
+                pdfBase64 = await UniversalPrinter.getPDFBase64Web(html);
+            } else {
+                const pdfUri = await Print.printToFileAsync({ html });
+                // ✅ Read PDF as base64
+                const response = await fetch(pdfUri.uri);
+                const blob = await response.blob();
+                pdfBase64 = await new Promise<string>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const result = reader.result as string;
+                        const base64 = result.split(',')[1];
+                        resolve(base64);
+                    };
+                    reader.readAsDataURL(blob);
+                });
+            }
 
             // ✅ Generate CSV
             const csvData = generateCSVData(reportData, outletName);

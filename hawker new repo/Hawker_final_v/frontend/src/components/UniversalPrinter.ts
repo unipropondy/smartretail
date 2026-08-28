@@ -163,6 +163,10 @@ class UniversalPrinter {
       const company = await BillPDFGenerator.loadSettings(userId);
       const html = this.generateSalesReportHTML(reportData, company);
 
+      if (Platform.OS === 'web') {
+        return await this.downloadPDFWeb(html, `sales_report_${Date.now()}.pdf`);
+      }
+
       // ✅ Save as PDF (no preview)
       const { uri } = await Print.printToFileAsync({ html });
       console.log('📄 Sales report saved at:', uri);
@@ -1007,6 +1011,10 @@ class UniversalPrinter {
       const html = selectedCategory
         ? this.generateCategoryDetailHTML(selectedCategory, categoryItems, categoryTransactions, company, { ...options, loggedInUsername, categoryTransactions })
         : this.generateAllCategoriesHTML(categories, company, { ...options, loggedInUsername, categoryTransactions });
+
+      if (Platform.OS === 'web') {
+        return await this.downloadPDFWeb(html, `category_report_${Date.now()}.pdf`);
+      }
 
       // ✅ Save as PDF (no preview)
       const { uri } = await Print.printToFileAsync({ html });
@@ -2676,23 +2684,98 @@ class UniversalPrinter {
     } catch (error) { return false; }
   }
 
+  static async downloadPDFWeb(html: string, filename: string): Promise<boolean> {
+    try {
+      const loadHtml2Pdf = () => {
+        return new Promise<any>((resolve, reject) => {
+          if ((window as any).html2pdf) {
+            resolve((window as any).html2pdf);
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+          script.onload = () => resolve((window as any).html2pdf);
+          script.onerror = () => reject(new Error('Failed to load html2pdf script'));
+          document.body.appendChild(script);
+        });
+      };
+
+      const html2pdf = await loadHtml2Pdf();
+      const opt = {
+        margin: [0.2, 0.2, 0.2, 0.2],
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true,
+          logging: false 
+        },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+      };
+
+      await html2pdf().set(opt).from(html).save();
+      return true;
+    } catch (err) {
+      console.log('Web PDF direct compiler error:', err);
+      return false;
+    }
+  }
+
+  static async getPDFBase64Web(html: string): Promise<string> {
+    try {
+      const loadHtml2Pdf = () => {
+        return new Promise<any>((resolve, reject) => {
+          if ((window as any).html2pdf) {
+            resolve((window as any).html2pdf);
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+          script.onload = () => resolve((window as any).html2pdf);
+          script.onerror = () => reject(new Error('Failed to load html2pdf script'));
+          document.body.appendChild(script);
+        });
+      };
+
+      const html2pdf = await loadHtml2Pdf();
+      const opt = {
+        margin: [0.2, 0.2, 0.2, 0.2],
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+      };
+
+      const dataUri = await html2pdf().set(opt).from(html).output('datauristring');
+      return dataUri.split(',')[1];
+    } catch (err) {
+      console.log('Web getPDFBase64 error:', err);
+      throw err;
+    }
+  }
+
   // ==================== PDF FALLBACK WITH DISCOUNT ====================
   static async offerPDFFallback(saleData: any, userId?: string | number, t?: any, discountInfo?: DiscountInfo): Promise<boolean> {
-    return new Promise((resolve) => {
-      Alert.alert(t?.printerNotFound || '🖨️ No Printer Available', t?.wantPDF || 'Save as PDF?', [
-        { text: t?.no || 'No', onPress: () => resolve(false), style: 'cancel' },
-        {
-          text: t?.yes || 'Yes', onPress: async () => {
-            try {
-              const html = await BillPDFGenerator.generateHTML(saleData, userId, discountInfo);
-              const { uri } = await Print.printToFileAsync({ html, width: 226 });
-              if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
-              resolve(true);
-            } catch { resolve(false); }
-          }
-        }
-      ]);
-    });
+    if (Platform.OS === 'web') {
+      try {
+        const html = await BillPDFGenerator.generateHTML(saleData, userId, discountInfo);
+        return await this.downloadPDFWeb(html, `receipt_${saleData.invoiceNumber || saleData.id || 'bill'}.pdf`);
+      } catch (err) {
+        console.log('Web direct download fallback error:', err);
+        return false;
+      }
+    }
+
+    try {
+      const html = await BillPDFGenerator.generateHTML(saleData, userId, discountInfo);
+      const { uri } = await Print.printToFileAsync({ html, width: 226 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri);
+      }
+      return true;
+    } catch (err) {
+      console.log('Mobile PDF fallback error:', err);
+      return false;
+    }
   }
 
   // ==================== UTILITIES ====================

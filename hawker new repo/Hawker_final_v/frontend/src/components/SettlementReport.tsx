@@ -11,6 +11,7 @@ import * as Sharing from 'expo-sharing';
 import API from '../api';
 import * as FileSystem from 'expo-file-system/legacy';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import DatePickerPortal from './DatePickerPortal';
 import UniversalPrinter from './UniversalPrinter';
 
 interface SettlementReportProps {
@@ -1004,14 +1005,6 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
           justify-content: space-between;
           gap: 10px;
         }
-        .donut-chart-container {
-          position: relative;
-          width: 75px;
-          height: 75px;
-        }
-        .donut-chart {
-          transform: rotate(-90deg);
-        }
         .donut-hole {
           fill: #fff;
         }
@@ -1207,8 +1200,8 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
           <div class="section-box">
             <h3 class="box-title">Payment Breakdown</h3>
             <div class="donut-wrap">
-              <div class="donut-chart-container">
-                <svg class="donut-chart" width="100%" height="100%" viewBox="0 0 42 42">
+              <div style="width: 80px; height: 80px; display: flex; justify-content: center; align-items: center; position: relative;">
+                <svg width="80" height="80" viewBox="0 0 42 42" class="donut">
                   <circle class="donut-hole" cx="21" cy="21" r="15.91549430918954" fill="#fff"></circle>
                   <circle class="donut-ring" cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#f2f2f7" stroke-width="4.5"></circle>
                   ${donutSegments.map((seg, idx) => {
@@ -1421,6 +1414,11 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
       return;
     }
 
+    if (Platform.OS === 'web') {
+      await handleDownloadPDF();
+      return;
+    }
+
     try {
       const dateStr = settlementDate.toISOString().split('T')[0];
       const staffData = getStaffBreakdown(salesList);
@@ -1449,8 +1447,13 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
       Alert.alert('Info', 'Please finalize settlement first');
       return;
     }
-    const { uri } = await Print.printToFileAsync({ html: generateHTML() });
-    await Sharing.shareAsync(uri);
+    const html = generateHTML();
+    if (Platform.OS === 'web') {
+      await UniversalPrinter.downloadPDFWeb(html, `settlement_report_${Date.now()}.pdf`);
+    } else {
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri);
+    }
   };
 
   const handleExportExcel = async () => {
@@ -1458,8 +1461,6 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
       Alert.alert('Info', 'Please finalize settlement first');
       return;
     }
-    
-    setProcessing(true);
     
     try {
       const csvRows = [
@@ -1478,6 +1479,19 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
       
       const csvContent = csvRows.map(row => row.join(',')).join('\n');
       
+      if (Platform.OS === 'web') {
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `settlement_${Date.now()}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+      
+      setProcessing(true);
       const fileName = `settlement_${Date.now()}.csv`;
       const filePath = FileSystem.cacheDirectory + fileName;
       
@@ -1544,10 +1558,16 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
     setSendingEmail(true);
     
     try {
-      const pdfResult = await Print.printToFileAsync({ 
-        html: generateHTML(),
-        base64: true
-      });
+      let pdfBase64 = '';
+      if (Platform.OS === 'web') {
+        pdfBase64 = await UniversalPrinter.getPDFBase64Web(generateHTML());
+      } else {
+        const pdfResult = await Print.printToFileAsync({ 
+          html: generateHTML(),
+          base64: true
+        });
+        pdfBase64 = pdfResult.base64 || '';
+      }
       
       const csvContent = generateCSV();
       let excelBase64 = '';
@@ -1560,7 +1580,7 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
       const response = await API.post('/send-settlement-email', {
         to: emailAddress,
         subject: `Settlement Report - ${settlementDate.toLocaleDateString()} - ${outletName}`,
-        pdfBase64: pdfResult.base64,
+        pdfBase64: pdfBase64,
         excelBase64: excelBase64,
         outletName: outletName,
         cashierName: cashierName,
@@ -1614,7 +1634,20 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
             <Ionicons name="calendar" size={20} color={theme.primary} />
             <Text style={[styles.dateText, { color: theme.text }]}>{settlementDate.toLocaleDateString()}</Text>
           </TouchableOpacity>
-          {showPicker && <DateTimePicker value={tempDate} mode="date" display="default" onChange={onDateChange} />}
+          <DatePickerPortal
+            visible={showPicker}
+            onClose={() => setShowPicker(false)}
+            onConfirm={(date) => {
+              setSettlementDate(date);
+              hasLoadedRef.current = false;
+              setIsSettled(false);
+              setSettlementId(null);
+              setShowPicker(false);
+            }}
+            currentDate={settlementDate}
+            theme={theme}
+            title="Select Settlement Date"
+          />
           
           <View style={styles.actionRow}>
             <TouchableOpacity
