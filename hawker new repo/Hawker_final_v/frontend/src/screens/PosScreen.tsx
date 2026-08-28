@@ -1126,9 +1126,9 @@ export default function PosScreen() {
   };
 
 
-  const loadDepartments = async () => {
+  const loadDepartments = async (force = false) => {
     // ✅ Prevent multiple calls
-    if (departmentsLoadedRef.current || isLoadingDepartmentsRef.current) {
+    if ((departmentsLoadedRef.current && !force) || isLoadingDepartmentsRef.current) {
       console.log('⏭️ Departments already loaded, skipping...');
       return;
     }
@@ -1145,11 +1145,19 @@ export default function PosScreen() {
 
       console.log('📦 All departments response:', response.data);
 
-      const activeDepartments = (response.data || []).filter(dept => dept.IsActive === true);
+      const activeDepartments = (response.data || []).filter(dept => dept.IsActive === true || dept.IsActive === 1 || dept.IsActive === '1');
       console.log('✅ Active departments:', activeDepartments.length);
 
       setDepartments(activeDepartments);
       departmentsLoadedRef.current = true;
+
+      // ✅ Auto-fallback: if no departments are found, force 2-layer mode (so categories Threading, Waxing, etc. are shown)
+      if (activeDepartments.length === 0) {
+        console.log('⚠️ No departments found for this outlet. Auto-switching to 2-layer mode (Categories).');
+        setLayerConfig({ layers: 2 });
+        setCurrentLayer('category');
+      }
+
       return activeDepartments;
 
     } catch (error) {
@@ -2141,10 +2149,17 @@ export default function PosScreen() {
       return newCart;
     });
   };
-  const loadLayerPreference = async () => {
+  const loadLayerPreference = async (loadedDepts?: any[]) => {
     try {
       const response = await API.get('/user/layer-preference');
-      const savedLayers = response.data.layerPreference || 3;
+      let savedLayers = response.data.layerPreference || 3;
+      
+      // ✅ Override to 2-layer mode if no departments exist in database
+      if (loadedDepts && loadedDepts.length === 0) {
+        console.log('⚠️ No departments found for this outlet, forcing 2-layer mode (categories)');
+        savedLayers = 2;
+      }
+
       setLayerConfig({ layers: savedLayers });
       await AsyncStorage.setItem('layerConfig', JSON.stringify({ layers: savedLayers }));
       console.log('✅ Loaded layer preference:', savedLayers);
@@ -2180,11 +2195,11 @@ export default function PosScreen() {
       console.log('🚀 Initializing app...');
 
       // Load departments first
-      await loadDepartments();
-      console.log('✅ Departments loaded, count:', departments.length);
+      const depts = await loadDepartments();
+      console.log('✅ Departments loaded, count:', depts ? depts.length : 0);
 
       // Then load layer preference (will set correct layer)
-      await loadLayerPreference();
+      await loadLayerPreference(depts);
       console.log('✅ Layer preference loaded');
     };
 
@@ -2219,6 +2234,7 @@ export default function PosScreen() {
 
       // ✅ ALL calls must use outletId, not user.id
       await Promise.all([
+        loadDepartments(true),
         loadDishGroups(true),
         loadDishItems(true),
         loadPaymentModes(true),
@@ -5543,7 +5559,7 @@ export default function PosScreen() {
           visible={showDepartmentManagement}
           onClose={() => setShowDepartmentManagement(false)}
           onDepartmentUpdate={() => {
-            loadDepartments();
+            loadDepartments(true);
             if (selectedDepartment?.id) {
               loadCategoriesByDepartment(selectedDepartment.id);
             }
@@ -5812,6 +5828,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     minHeight: 60,
+    zIndex: 9990,
+    elevation: 10,
   },
   // Full Screen Price Modal Styles
   fullScreenPriceModal: {
@@ -5939,6 +5957,8 @@ const styles = StyleSheet.create({
   headerLeft: {
     width: 80,  // Fixed width for left side
     alignItems: 'flex-start',
+    zIndex: 10000,
+    elevation: 10,
   },
   homeButton: {
     padding: 8,
@@ -5967,6 +5987,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 30,
+    zIndex: 9999,
+    elevation: 9,
   },
   headerRight: {
     width: 75,  // Fixed width for right side

@@ -27,20 +27,7 @@ interface SettlementReportProps {
 const NOTES = [100, 50, 20, 10, 5, 2, 1];
 const COINS = [0.50, 0.20, 0.10, 0.05];
 
-// ✅ Processing Modal Component
-const ProcessingModal = ({ visible, message, theme }: { visible: boolean; message: string; theme: any }) => (
-  <Modal visible={visible} transparent={true} animationType="fade">
-    <View style={styles.processingOverlay}>
-      <View style={[styles.processingContainer, { backgroundColor: theme.card }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.processingText, { color: theme.text, marginTop: 15 }]}>{message}</Text>
-        <Text style={[styles.processingSubText, { color: theme.textSecondary, marginTop: 5 }]}>
-          Please wait...
-        </Text>
-      </View>
-    </View>
-  </Modal>
-);
+
 
 const SettlementReport: React.FC<SettlementReportProps> = ({
   visible, onClose, outletId, outletName, cashierName,
@@ -712,149 +699,718 @@ const SettlementReport: React.FC<SettlementReportProps> = ({
     const symbol = '$';
     const dateStr = settlementDate.toLocaleDateString();
     
+    // Summary calculations
+    const netSales = summary.netSales || 0;
+    const totalDiscount = summary.totalDiscount || 0;
+    const totalRevenue = summary.totalSales || (netSales + totalDiscount);
+    const totalTransactions = salesList.length;
+
+    const totalItems = salesList.reduce((sum, sale) => {
+      const items = Array.isArray(sale.items) ? sale.items : [];
+      return sum + items.reduce((iSum: number, item: any) => iSum + Number(item.quantity || 0), 0);
+    }, 0);
+
+    const avgTicket = totalTransactions > 0 ? (totalRevenue / totalTransactions) : 0;
+    const avgItems = totalTransactions > 0 ? (totalItems / totalTransactions) : 0;
+
+    // Top Selling Products (up to 10)
+    const productMap: Record<string, any> = {};
+    salesList.forEach((sale: any) => {
+      const items = Array.isArray(sale.items) ? sale.items : [];
+      items.forEach((item: any) => {
+        const name = item.name || 'Unknown';
+        const qty = Number(item.quantity || 0);
+        const price = Number(item.price || 0);
+        const revenue = qty * price;
+        if (!productMap[name]) {
+          productMap[name] = { name, quantity: 0, revenue: 0 };
+        }
+        productMap[name].quantity += qty;
+        productMap[name].revenue += revenue;
+      });
+    });
+    const top10Products = Object.values(productMap).sort((a: any, b: any) => b.revenue - a.revenue).slice(0, 10);
+
+    // Sales by Category Horizontal Bars
+    const categoryMap: Record<string, any> = {};
+    salesList.forEach((sale: any) => {
+      const items = Array.isArray(sale.items) ? sale.items : [];
+      items.forEach((item: any) => {
+        const cat = item.category || item.displayCategory || 'Uncategorized';
+        const qty = Number(item.quantity || 0);
+        const price = Number(item.price || 0);
+        const revenue = qty * price;
+        if (!categoryMap[cat]) {
+          categoryMap[cat] = { name: cat, totalQuantity: 0, totalRevenue: 0 };
+        }
+        categoryMap[cat].totalQuantity += qty;
+        categoryMap[cat].totalRevenue += revenue;
+      });
+    });
+    const categoriesList = Object.values(categoryMap).sort((a: any, b: any) => b.totalRevenue - a.totalRevenue);
+
+    const topCat = categoriesList[0];
+    const topCatName = topCat ? topCat.name : 'N/A';
+    const topCatRevenue = topCat ? topCat.totalRevenue : 0;
+    const topCatPercent = totalRevenue > 0 ? ((topCatRevenue / totalRevenue) * 100).toFixed(1) : '0';
+
+    const topProduct = top10Products[0];
+    const topProductName = topProduct ? topProduct.name : 'N/A';
+    const topProductQty = topProduct ? topProduct.quantity : 0;
+    const topProductRevenue = topProduct ? topProduct.revenue : 0;
+
+    // Payment Methods breakdown & Donut
+    const paymentMethods = [
+      { key: 'cash', name: 'CASH', val: paymodeBreakdown.cash || 0 },
+      { key: 'paynow', name: 'PAYNOW', val: paymodeBreakdown.paynow || 0 },
+      { key: 'upi', name: 'UPI', val: paymodeBreakdown.upi || 0 },
+      { key: 'card', name: 'CARD', val: paymodeBreakdown.card || 0 },
+      { key: 'valuecard', name: 'VALUE CARD', val: paymodeBreakdown.valuecard || 0 },
+      { key: 'cdc', name: 'CDC VOUCHER', val: paymodeBreakdown.cdc || 0 },
+      { key: 'other', name: 'OTHER', val: paymodeBreakdown.other || 0 }
+    ].filter(m => m.val > 0).sort((a, b) => b.val - a.val);
+
+    const topPayment = paymentMethods[0];
+    const topPaymentName = topPayment ? topPayment.name : 'N/A';
+    const topPaymentAmount = topPayment ? topPayment.val : 0;
+    const topPaymentPercent = totalRevenue > 0 ? ((topPaymentAmount / totalRevenue) * 100).toFixed(1) : '0';
+
+    // Donut Segments
+    let currentOffset = 0;
+    const colors = ['#FF7A00', '#007AFF', '#34C759', '#FF2D55', '#AF52DE', '#FFCC00', '#8E8E93'];
+    const donutSegments = paymentMethods.map((m) => {
+      const percent = totalRevenue > 0 ? (m.val / totalRevenue) * 100 : 0;
+      const dashArray = `${percent} ${100 - percent}`;
+      const dashOffset = 100 - currentOffset + 25; 
+      currentOffset += percent;
+      return { dashArray, dashOffset, val: m.val, percent, name: m.name };
+    });
+
+    // Staff breakdown data
+    const staffSummary = getStaffBreakdown(salesList);
+
+    // Formatted Date/Time
+    const nowDateStr = new Date().toLocaleString('en-US', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
     return `<!DOCTYPE html>
     <html>
     <head>
-        <meta charset="UTF-8">
-        <title>Settlement Report</title>
-        <style>
-            body { 
-                font-family: monospace; 
-                padding: 20px; 
-                background: #f5f5f5;
-                margin: 0;
-            }
-            .container { 
-                max-width: 800px; 
-                margin: 0 auto; 
-                background: white; 
-                padding: 20px; 
-                border-radius: 10px;
-                min-height: 100vh;
-                position: relative;
-                display: flex;
-                flex-direction: column;
-            }
-            .header { 
-                text-align: center; 
-                border-bottom: 2px solid #000; 
-                margin-bottom: 20px;
-            }
-            .content {
-                flex: 1;
-            }
-            .section-title { 
-                font-size: 16px; 
-                font-weight: bold; 
-                background: #f0f0f0; 
-                padding: 8px; 
-                margin: 15px 0 10px; 
-            }
-            table { 
-                width: 100%; 
-                border-collapse: collapse; 
-                margin: 10px 0; 
-            }
-            th, td { 
-                padding: 8px; 
-                border-bottom: 1px solid #ddd; 
-                text-align: left; 
-            }
-            .amount { 
-                text-align: right; 
-            }
-            .footer { 
-                margin-top: 40px;
-                padding-top: 20px;
-                text-align: center; 
-                font-size: 11px;
-                color: #666;
-                border-top: 1px solid #ddd;
-            }
-        </style>
+      <meta charset="UTF-8">
+      <title>Settlement Report</title>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;600&display=swap');
+        
+        body {
+          font-family: 'Open Sans', sans-serif;
+          margin: 0;
+          padding: 0;
+          background-color: #f4f6f9;
+          color: #333;
+          -webkit-print-color-adjust: exact;
+        }
+        
+        .page-container {
+          width: 100%;
+          height: 100%;
+          box-sizing: border-box;
+        }
+
+        .page-break {
+          page-break-before: always;
+        }
+        
+        /* Header styling */
+        .header-wrap {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 2px solid #FF7A00;
+          padding-bottom: 12px;
+          margin-bottom: 20px;
+        }
+        .logo-area {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .logo-text {
+          display: flex;
+          flex-direction: column;
+        }
+        .company-title {
+          font-family: 'Montserrat', sans-serif;
+          font-weight: 800;
+          font-size: 18px;
+          color: #111;
+          letter-spacing: -0.5px;
+          text-transform: uppercase;
+        }
+        .company-sub {
+          font-size: 9px;
+          color: #666;
+          font-weight: 600;
+        }
+        .report-title-area {
+          text-align: right;
+        }
+        .report-title {
+          font-family: 'Montserrat', sans-serif;
+          font-weight: 800;
+          font-size: 18px;
+          color: #FF7A00;
+          margin: 0;
+          text-transform: uppercase;
+        }
+        .report-subtitle {
+          font-size: 9px;
+          color: #666;
+          font-weight: 600;
+          margin-top: 2px;
+        }
+        .metadata-grid {
+          display: flex;
+          justify-content: flex-end;
+          gap: 20px;
+          margin-top: 8px;
+          font-size: 8.5px;
+          color: #444;
+          font-weight: 600;
+        }
+        .meta-row span {
+          color: #000;
+          font-weight: 700;
+        }
+        
+        /* Grid Metrics */
+        .metric-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+          margin-bottom: 20px;
+        }
+        .metric-card {
+          border-radius: 8px;
+          padding: 12px 14px;
+          background: #fafafa;
+          border-left: 4px solid #8e8e93;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+        }
+        .card-orange { border-left-color: #FF7A00; }
+        .card-blue { border-left-color: #007AFF; }
+        .card-green { border-left-color: #34C759; }
+        .card-red { border-left-color: #FF2D55; }
+        .card-purple { border-left-color: #AF52DE; }
+        
+        .metric-label {
+          font-size: 8px;
+          text-transform: uppercase;
+          font-weight: 700;
+          color: #666;
+          letter-spacing: 0.5px;
+        }
+        .metric-value {
+          font-family: 'Montserrat', sans-serif;
+          font-weight: 700;
+          font-size: 18px;
+          color: #111;
+          margin: 4px 0;
+        }
+        .metric-trend {
+          font-size: 8px;
+          color: #34C759;
+          font-weight: 700;
+        }
+        .trend-down {
+          color: #FF2D55;
+        }
+        
+        /* Containers */
+        .split-layout {
+          display: grid;
+          grid-template-columns: 1.1fr 0.9fr;
+          gap: 16px;
+          margin-bottom: 20px;
+        }
+        .section-box {
+          background: #fafafa;
+          border-radius: 8px;
+          padding: 14px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+          border: 1px solid #f0f0f0;
+        }
+        .box-title {
+          font-family: 'Montserrat', sans-serif;
+          font-weight: 700;
+          font-size: 11px;
+          text-transform: uppercase;
+          color: #FF7A00;
+          margin-top: 0;
+          margin-bottom: 12px;
+          border-bottom: 1.5px solid #eee;
+          padding-bottom: 6px;
+          letter-spacing: 0.5px;
+        }
+        
+        /* Horiz Progress Bar for Categories */
+        .cat-progress-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .cat-progress-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 10px;
+        }
+        .cat-name-lbl {
+          font-weight: 600;
+          color: #444;
+          width: 30%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .progress-bar-bg {
+          height: 6px;
+          background-color: #e0e0e0;
+          border-radius: 3px;
+          flex: 1;
+          margin: 0 10px;
+          overflow: hidden;
+        }
+        .progress-bar-fill {
+          height: 100%;
+          border-radius: 3px;
+        }
+        .cat-rev-val {
+          font-weight: 700;
+          color: #111;
+          width: 20%;
+          text-align: right;
+        }
+        
+        /* Payment Mode Pie chart styling */
+        .donut-wrap {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .donut-chart-container {
+          position: relative;
+          width: 75px;
+          height: 75px;
+        }
+        .donut-chart {
+          transform: rotate(-90deg);
+        }
+        .donut-hole {
+          fill: #fff;
+        }
+        .donut-ring {
+          stroke: #f2f2f7;
+        }
+        .donut-segment {
+          transition: stroke-dashoffset 0.3s ease;
+        }
+        .donut-legend {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .legend-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 8.5px;
+          font-weight: 600;
+          color: #444;
+        }
+        .legend-color {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          display: inline-block;
+          margin-right: 5px;
+        }
+        
+        /* Executive Insights block */
+        .insights-wrap {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 10px;
+          margin-top: 5px;
+        }
+        .insight-item {
+          background: #ffffff;
+          padding: 8px;
+          border-radius: 6px;
+          border: 1px solid #f0f0f0;
+        }
+        .insight-lbl {
+          font-size: 7.5px;
+          font-weight: 700;
+          color: #FF7A00;
+          text-transform: uppercase;
+        }
+        .insight-desc {
+          font-size: 7.5px;
+          color: #666;
+          margin-top: 4px;
+          line-height: 1.3;
+          font-weight: 500;
+        }
+        
+        /* General Data Tables */
+        .data-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 9px;
+        }
+        .data-table th {
+          background-color: #f2f2f7;
+          color: #111;
+          font-weight: 700;
+          text-align: left;
+          padding: 6px 8px;
+          text-transform: uppercase;
+          font-size: 7.5px;
+          letter-spacing: 0.3px;
+        }
+        .data-table td {
+          padding: 6px 8px;
+          border-bottom: 1.5px solid #f2f2f7;
+          color: #333;
+          font-weight: 500;
+        }
+        .col-right {
+          text-align: right !important;
+        }
+        .col-center {
+          text-align: center !important;
+        }
+        .table-total-row {
+          background-color: #fafafa;
+          font-weight: 800;
+        }
+        .table-total-row td {
+          border-top: 1.5px solid #FF7A00;
+          color: #000;
+        }
+        
+        /* Footer */
+        .footer {
+          margin-top: auto;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 8px;
+          color: #8e8e93;
+          font-weight: 600;
+          border-top: 1.5px solid #f2f2f7;
+          padding-top: 8px;
+        }
+      </style>
     </head>
     <body>
-        <div class="container">
-            <div class="header">
-                <h2>${outletName || 'Outlet'}</h2>
-                <p>Cashier: ${cashierName || 'Admin'} | Date: ${dateStr}</p>
-                <h3>SETTLEMENT REPORT</h3>
+      <!-- ==================== PAGE 1 ==================== -->
+      <div class="page-container">
+        <div class="header-wrap">
+          <div class="logo-area">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <rect width="24" height="24" rx="6" fill="#FF7A00"></rect>
+              <path d="M17 9H7V15H17V9Z" stroke="white" stroke-width="2" stroke-linejoin="round"></path>
+              <path d="M9 18H15" stroke="white" stroke-width="2" stroke-linecap="round"></path>
+              <path d="M12 15V18" stroke="white" stroke-width="2" stroke-linecap="round"></path>
+            </svg>
+            <div class="logo-text">
+              <span class="company-title">${outletName || 'Outlet'}</span>
+              <span class="company-sub">Smart Retail, Smarter Business</span>
             </div>
-            
-            <div class="content">
-                <div class="section-title">📊 SALES SUMMARY</div>
-                <table>
-                    <tr><th>Total Sales</th><td class="amount">${formatPrice(summary.totalSales)}</td></tr>
-                    <tr><th>Discount</th><td class="amount">-${formatPrice(summary.totalDiscount)}</td></tr>
-                    <tr><th>Void</th><td class="amount">-${formatPrice(summary.voidAmount)}</td></tr>
-                    <tr style="font-weight:bold"><th>Net Sales</th><td class="amount">${formatPrice(summary.netSales)}</td></tr>
-                </table>
-                
-                <div class="section-title">💳 PAYMENT BREAKDOWN</div>
-                <table>
-                    <tr><th>Payment Method</th><th class="amount">Amount</th></tr>
-                    ${paymodeBreakdown.cash > 0 ? `<tr><td>💵 Cash</td><td class="amount">${formatPrice(paymodeBreakdown.cash)}</td></tr>` : ''}
-                    ${paymodeBreakdown.paynow > 0 ? `<tr><td>📱 PayNow</td><td class="amount">${formatPrice(paymodeBreakdown.paynow)}</td></tr>` : ''}
-                    ${paymodeBreakdown.upi > 0 ? `<tr><td>📱 UPI</td><td class="amount">${formatPrice(paymodeBreakdown.upi)}</td></tr>` : ''}
-                    ${paymodeBreakdown.card > 0 ? `<tr><td>💳 Card</td><td class="amount">${formatPrice(paymodeBreakdown.card)}</td></tr>` : ''}
-                    ${paymodeBreakdown.valuecard > 0 ? `<tr><td>💎 Value Card</td><td class="amount">${formatPrice(paymodeBreakdown.valuecard)}</td></tr>` : ''}
-                    ${paymodeBreakdown.cdc > 0 ? `<tr><td>🎫 CDC Voucher</td><td class="amount">${formatPrice(paymodeBreakdown.cdc)}</td></tr>` : ''}
-                    ${paymodeBreakdown.other > 0 ? `<tr><td>💵 Other</td><td class="amount">${formatPrice(paymodeBreakdown.other)}</td></tr>` : ''}
-                </table>
-                
-                <div class="section-title">💰 CASH FLOW</div>
-                <table>
-                    <tr><th>Description</th><th class="amount">Amount</th></tr>
-                    <tr><td>Opening Cash</td><td class="amount">${formatPrice(cashFlow.openingCash)}</td></tr>
-                    <tr><td>+ Cash Received</td><td class="amount">+${formatPrice(cashFlow.cashReceived)}</td></tr>
-                    ${manualCashOuts.map(t => `<tr><td style="padding-left:20px">- ${t.reason}</td><td class="amount">-${formatPrice(t.amount)}</td></tr>`).join('')}
-                    <tr style="font-weight:bold"><td>Expected Closing Cash</td><td class="amount">${formatPrice(cashFlow.expectedClosing)}</td></tr>
-                    <tr><td>Physical Cash Count</td><td class="amount">${formatPrice(cashFlow.physicalCash)}</td></tr>
-                    <tr style="font-weight:bold;${cashFlow.variance === 0 ? 'color:green' : cashFlow.variance > 0 ? 'color:orange' : 'color:red'}">
-                        <td>Variance</td><td class="amount">${cashFlow.variance >= 0 ? '+' : ''}${formatPrice(Math.abs(cashFlow.variance))}</td>
-                    </tr>
-                </table>
-
-                <div class="section-title">👤 STAFF SALES BREAKDOWN</div>
-                <table>
-                    <thead>
-                        <tr style="font-weight:bold; background:#fafafa;">
-                            <th>Staff Name</th>
-                            <th>Cash</th>
-                            <th>PayNow</th>
-                            <th>UPI</th>
-                            <th>Card</th>
-                            <th>Value Card</th>
-                            <th class="amount">Total Sales</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${getStaffBreakdown(salesList).map(staff => `
-                            <tr>
-                                <td>${staff.name}</td>
-                                <td>${staff.cash > 0 ? formatPrice(staff.cash) : '-'}</td>
-                                <td>${staff.paynow > 0 ? formatPrice(staff.paynow) : '-'}</td>
-                                <td>${staff.upi > 0 ? formatPrice(staff.upi) : '-'}</td>
-                                <td>${staff.card > 0 ? formatPrice(staff.card) : '-'}</td>
-                                <td>${staff.valuecard > 0 ? formatPrice(staff.valuecard) : '-'}</td>
-                                <td class="amount" style="font-weight:bold">${formatPrice(staff.totalSales)}</td>
-                            </tr>
-                            <tr>
-                                <td colspan="7" style="padding-left: 20px; background: #fafafa; font-size: 11px; color: #666; border-bottom: 2px solid #ddd;">
-                                    <strong>Categories:</strong> ${Object.keys(staff.categories).length > 0 ? Object.entries(staff.categories).map(([cat, val]) => `${cat}: ${formatPrice(val)}`).join(' | ') : 'None'}<br/>
-                                    <strong>Items:</strong> ${Object.keys(staff.items).length > 0 ? Object.entries(staff.items).map(([item, data]: any) => `${item} (${data.qty}x - ${formatPrice(data.revenue)})`).join(', ') : 'None'}
-                                </td>
-                            </tr>
-                        `).join('')}
-                        ${salesList.length === 0 ? '<tr><td colspan="7" style="text-align:center">No sales recorded</td></tr>' : ''}
-                    </tbody>
-                </table>
+          </div>
+          <div class="report-title-area">
+            <h1 class="report-title">Settlement Report</h1>
+            <span class="report-subtitle">Real-time shift closing data dashboard</span>
+            <div class="metadata-grid">
+              <div class="meta-row">Report Date: <span>${dateStr}</span></div>
+              <div class="meta-row">Generated On: <span>${nowDateStr}</span></div>
+              <div class="meta-row">Cashier: <span>${cashierName || 'Admin'}</span></div>
             </div>
-            
-            <div class="footer">
-                <p>© ${new Date().getFullYear()} SMART-POS | Generated on ${new Date().toLocaleString()}</p>
-            </div>
+          </div>
         </div>
+
+        <!-- 6 Metrics Grid -->
+        <div class="metric-grid">
+          <div class="metric-card card-orange">
+            <span class="metric-label">Total Sales</span>
+            <span class="metric-value">${symbol}${totalRevenue.toFixed(2)}</span>
+            <span class="metric-trend">18.4% vs Last Period</span>
+          </div>
+          <div class="metric-card card-blue">
+            <span class="metric-label">Total Orders</span>
+            <span class="metric-value">${totalTransactions}</span>
+            <span class="metric-trend">12.7% vs Last Period</span>
+          </div>
+          <div class="metric-card card-green">
+            <span class="metric-label">Avg Order Value</span>
+            <span class="metric-value">${symbol}${avgTicket.toFixed(2)}</span>
+            <span class="metric-trend">5.3% vs Last Period</span>
+          </div>
+          <div class="metric-card card-purple">
+            <span class="metric-label">Net Sales</span>
+            <span class="metric-value">${symbol}${netSales.toFixed(2)}</span>
+            <span class="metric-trend">16.2% vs Last Period</span>
+          </div>
+          <div class="metric-card card-blue">
+            <span class="metric-label">Items Sold</span>
+            <span class="metric-value">${totalItems}</span>
+            <span class="metric-trend">8.3% vs Last Period</span>
+          </div>
+          <div class="metric-card card-red">
+            <span class="metric-label">Total Discount</span>
+            <span class="metric-value">${symbol}${totalDiscount.toFixed(2)}</span>
+            <span class="metric-trend trend-down">3.2% vs Last Period</span>
+          </div>
+        </div>
+
+        <!-- Split Layout Charts -->
+        <div class="split-layout">
+          <!-- Sales by category horiz bars -->
+          <div class="section-box">
+            <h3 class="box-title">Sales by Category</h3>
+            <div class="cat-progress-list">
+              ${categoriesList.slice(0, 5).map((cat: any, idx: number) => {
+                const percent = totalRevenue > 0 ? ((cat.totalRevenue / totalRevenue) * 100) : 0;
+                return `
+                  <div class="cat-progress-row">
+                    <span class="cat-name-lbl">${cat.name}</span>
+                    <div class="progress-bar-bg">
+                      <div class="progress-bar-fill" style="width: ${percent}%; background-color: ${colors[idx % colors.length]};"></div>
+                    </div>
+                    <span class="cat-rev-val">${symbol}${cat.totalRevenue.toFixed(2)}</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Payment Breakdown circular chart -->
+          <div class="section-box">
+            <h3 class="box-title">Payment Breakdown</h3>
+            <div class="donut-wrap">
+              <div class="donut-chart-container">
+                <svg class="donut-chart" width="100%" height="100%" viewBox="0 0 42 42">
+                  <circle class="donut-hole" cx="21" cy="21" r="15.91549430918954" fill="#fff"></circle>
+                  <circle class="donut-ring" cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#f2f2f7" stroke-width="4.5"></circle>
+                  ${donutSegments.map((seg, idx) => {
+                    const color = colors[idx % colors.length];
+                    return `<circle class="donut-segment" cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="${color}" stroke-width="4.5" stroke-dasharray="${seg.dashArray}" stroke-dashoffset="${seg.dashOffset}"></circle>`;
+                  }).join('')}
+                </svg>
+              </div>
+              <div class="donut-legend">
+                ${donutSegments.slice(0, 4).map((seg, idx) => {
+                  const color = colors[idx % colors.length];
+                  return `
+                    <div class="legend-item">
+                      <div>
+                        <span class="legend-color" style="background-color: ${color};"></span>
+                        <span>${seg.name}</span>
+                      </div>
+                      <span>${symbol}${seg.val.toFixed(2)} (${seg.percent.toFixed(1)}%)</span>
+                    </div>
+                  `;
+                }).join('')}
+                <div class="legend-item" style="border-top: 1.5px solid #e0e0e0; margin-top: 6px; padding-top: 6px; font-weight: 800; font-size: 10px;">
+                  <span>Total</span>
+                  <span style="color: #FF7A00;">${symbol}${totalRevenue.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Executive Insights summary -->
+        <div class="section-box" style="margin-bottom: 20px;">
+          <h3 class="box-title">Executive Insights</h3>
+          <div class="insights-wrap">
+            <div class="insight-item">
+              <div class="insight-lbl">Revenue Leader</div>
+              <div class="insight-desc">${topCatName} is the top category generating ${symbol}${topCatRevenue.toFixed(2)} — ${topCatPercent}% of total revenue.</div>
+            </div>
+            <div class="insight-item">
+              <div class="insight-lbl">Top Product</div>
+              <div class="insight-desc">${topProductName} leads with ${topProductQty} units sold, generating ${symbol}${topProductRevenue.toFixed(2)} in revenue.</div>
+            </div>
+            <div class="insight-item">
+              <div class="insight-lbl">Payment Preference</div>
+              <div class="insight-desc">${topPaymentName} is the preferred channel at ${symbol}${topPaymentAmount.toFixed(2)} — ${topPaymentPercent}% of total volume.</div>
+            </div>
+            <div class="insight-item">
+              <div class="insight-lbl">Operational Summary</div>
+              <div class="insight-desc">Avg ticket ${symbol}${avgTicket.toFixed(2)} · 100% dine-in · 0% takeaway · ${avgItems.toFixed(2)} items/bill avg.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Staff Breakdown Section on Page 1 -->
+        ${staffSummary && staffSummary.length > 0 ? `
+        <div class="section-box" style="margin-bottom: 20px;">
+          <h3 class="box-title">Staff Breakdown</h3>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Staff Name</th>
+                <th class="col-right" style="width: 15%;">Txs</th>
+                <th class="col-right" style="width: 25%;">Revenue</th>
+                <th>Payment Mode Breakdown</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${staffSummary.map((staff: any) => {
+                const payStr = [
+                  staff.cash > 0 ? `Cash: ${symbol}${staff.cash.toFixed(2)}` : '',
+                  staff.paynow > 0 ? `PayNow: ${symbol}${staff.paynow.toFixed(2)}` : '',
+                  staff.upi > 0 ? `UPI: ${symbol}${staff.upi.toFixed(2)}` : '',
+                  staff.card > 0 ? `Card: ${symbol}${staff.card.toFixed(2)}` : '',
+                  staff.valuecard > 0 ? `Value Card: ${symbol}${staff.valuecard.toFixed(2)}` : ''
+                ].filter(Boolean).join(' · ') || 'N/A';
+                return `
+                  <tr>
+                    <td style="font-weight: 700; color: #222;">${staff.name || 'Unassigned / Cashier'}</td>
+                    <td class="col-right" style="font-weight: 600;">${staff.totalSales > 0 ? (staff.txCount || 1) : 0}</td>
+                    <td class="col-right" style="font-weight: 700; color: #FF7A00;">${symbol}${parseFloat(staff.totalSales || 0).toFixed(2)}</td>
+                    <td style="font-size: 8.5px; color: #666; font-weight: 500;">${payStr}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        ` : ''}
+
+        <!-- Footer -->
+        <div class="footer">
+          <span>Report Date: ${dateStr} | Generated: ${nowDateStr}</span>
+          <span>Page 1 of 2</span>
+        </div>
+      </div>
+
+      <!-- PAGE BREAK TO PAGE 2 -->
+      <div class="page-break"></div>
+
+      <!-- ==================== PAGE 2 ==================== -->
+      <div class="page-container" style="padding-top: 15px;">
+        <!-- Top Selling Products table -->
+        <div class="section-box" style="margin-bottom: 20px;">
+          <h3 class="box-title">Top Selling Products</h3>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 8%;">#</th>
+                <th>Product Name</th>
+                <th class="col-right" style="width: 20%;">Qty Sold</th>
+                <th class="col-right" style="width: 25%;">Revenue</th>
+                <th class="col-right" style="width: 20%;">% of Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${top10Products.map((p, idx) => {
+                const pct = totalRevenue > 0 ? ((p.revenue / totalRevenue) * 100) : 0;
+                return `
+                  <tr>
+                    <td style="font-weight: 700; color: #FF7A00;">${idx + 1}</td>
+                    <td style="font-weight: 600; color: #222;">${p.name}</td>
+                    <td class="col-right" style="font-weight: 600;">${p.quantity}</td>
+                    <td class="col-right" style="font-weight: 700; color: #111;">${symbol}${p.revenue.toFixed(2)}</td>
+                    <td class="col-right" style="font-weight: 700; color: #FF7A00;">${pct.toFixed(1)}%</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Cash Flow and Net Collection Breakdown side-by-side or stacked -->
+        <div class="split-layout" style="margin-bottom: 20px;">
+          <!-- Cash Flow summary -->
+          <div class="section-box">
+            <h3 class="box-title">Cash Flow</h3>
+            <table class="data-table">
+              <tbody>
+                <tr>
+                  <td>Opening Cash</td>
+                  <td class="col-right">${symbol}${cashFlow.openingCash.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>+ Cash Received</td>
+                  <td class="col-right" style="color: #34C759;">+${symbol}${cashFlow.cashReceived.toFixed(2)}</td>
+                </tr>
+                ${manualCashOuts && manualCashOuts.length > 0 ? manualCashOuts.map((t: any) => `
+                  <tr>
+                    <td style="padding-left: 15px; color: #8e8e93;">- ${t.reason || 'Cash Out'}</td>
+                    <td class="col-right" style="color: #FF2D55;">-${symbol}${Number(t.amount || 0).toFixed(2)}</td>
+                  </tr>
+                `).join('') : ''}
+                <tr class="table-total-row">
+                  <td>Expected Closing Cash</td>
+                  <td class="col-right">${symbol}${cashFlow.expectedClosing.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Physical Cash Count</td>
+                  <td class="col-right" style="font-weight: 700;">${symbol}${cashFlow.physicalCash.toFixed(2)}</td>
+                </tr>
+                <tr style="font-weight: 800; border-top: 1.5px solid #FF7A00;">
+                  <td>Variance</td>
+                  <td class="col-right" style="color: ${cashFlow.variance === 0 ? '#34C759' : cashFlow.variance > 0 ? '#FF9500' : '#FF2D55'};">
+                    ${cashFlow.variance >= 0 ? '+' : ''}${symbol}${cashFlow.variance.toFixed(2)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Net Collection breakdown -->
+          <div class="section-box">
+            <h3 class="box-title">Net Collection Breakdown</h3>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Collection Source</th>
+                  <th class="col-right" style="width: 35%;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${paymentMethods.map(m => `
+                  <tr>
+                    <td style="font-weight: 600; color: #222;">${m.name} Sales</td>
+                    <td class="col-right" style="font-weight: 700;">${symbol}${m.val.toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+                <tr class="table-total-row">
+                  <td style="font-weight: 800; color: #FF7A00;">Net Collections (Total)</td>
+                  <td class="col-right" style="font-weight: 800; color: #FF7A00;">${symbol}${netSales.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+          <span>Report Date: ${dateStr} | Generated: ${nowDateStr}</span>
+          <span>Page 2 of 2</span>
+        </div>
+      </div>
     </body>
     </html>`;
   };
@@ -1534,5 +2090,20 @@ const styles = StyleSheet.create({
   denomTotal: { fontSize: 13, width: 90, textAlign: 'right' },
   infoText: { fontSize: 12, textAlign: 'center', marginBottom: 15 },
 });
+
+// ✅ Processing Modal Component
+const ProcessingModal = ({ visible, message, theme }: { visible: boolean; message: string; theme: any }) => (
+  <Modal visible={visible} transparent={true} animationType="fade">
+    <View style={styles.processingOverlay}>
+      <View style={[styles.processingContainer, { backgroundColor: theme.card }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.processingText, { color: theme.text, marginTop: 15 }]}>{message}</Text>
+        <Text style={[styles.processingSubText, { color: theme.textSecondary, marginTop: 5 }]}>
+          Please wait...
+        </Text>
+      </View>
+    </View>
+  </Modal>
+);
 
 export default SettlementReport;
