@@ -93,7 +93,7 @@ const upload = multer({
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Outlet-Id', 'x-outlet-id']
 }));
 
 app.use(express.json());

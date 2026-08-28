@@ -45,8 +45,7 @@ const API = axios.create({
   timeout: 180000, // Increase to 60 seconds
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'Connection': 'keep-alive'  // Add keep-alive
+    'Accept': 'application/json'
   }
 });
 
