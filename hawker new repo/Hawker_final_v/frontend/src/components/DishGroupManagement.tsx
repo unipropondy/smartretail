@@ -307,9 +307,7 @@ useEffect(() => {
 }, [filterDepartmentId]);
   const saveOrderToBackend = async (groups: DishGroup[]) => {
     try {
-      // ✅ Filter out dynamic groups from order saving? Or keep them at bottom
       const orderData = groups
-        .filter(g => g.name !== 'Favourites') // Favourites always at bottom?
         .map((group, index) => ({
           id: group.id,
           order: index
@@ -323,17 +321,8 @@ useEffect(() => {
   };
 
   const handleDragEnd = async ({ data }: { data: DishGroup[] }) => {
-    // ✅ Ensure Favourites stays at bottom if it exists
-    const favourites = data.find(g => g.name === 'Favourites');
-    const otherGroups = data.filter(g => g.name !== 'Favourites');
-    
-    let finalData = otherGroups;
-    if (favourites && favourites.itemCount > 0) {
-      finalData = [...otherGroups, favourites];
-    }
-    
-    setDishGroups(finalData);
-    await saveOrderToBackend(finalData);
+    setDishGroups(data);
+    await saveOrderToBackend(data);
     setIsDragging(false);
     onGroupUpdate();
   };
@@ -352,8 +341,7 @@ useEffect(() => {
   };
 
   const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<DishGroup>) => {
-    // ✅ Disable drag for Favourites
-    const canDrag = item.name !== 'Favourites';
+    const canDrag = true;
     
     return (
       <ScaleDecorator>

@@ -126,9 +126,7 @@ const getAllGroups = async (req, res) => {
                     DepartmentId
                 FROM DishGroup 
                 WHERE OutletId = @outletId 
-                ORDER BY 
-                    CASE WHEN Name = 'Favourites' THEN 999999 ELSE DisplayOrder END,
-                    Name
+                ORDER BY DisplayOrder, Name
             `);
         
         // ✅ Filter: Hide Favourites only if it has 0 items AND is not the only group
@@ -422,11 +420,6 @@ const updateGroupOrder = async (req, res) => {
         
         try {
             for (const group of groups) {
-                // ✅ Skip Favourites from order update (keep at bottom)
-                if (favouritesId && group.id === favouritesId) {
-                    continue;
-                }
-                
                 // Verify group belongs to outlet
                 const checkResult = await transaction.request()
                     .input('id', sql.Int, group.id)
@@ -440,18 +433,6 @@ const updateGroupOrder = async (req, res) => {
                 await transaction.request()
                     .input('id', sql.Int, group.id)
                     .input('order', sql.Int, group.order)
-                    .query('UPDATE DishGroup SET DisplayOrder = @order WHERE Id = @id');
-            }
-            
-            // ✅ Ensure Favourites has highest order (at bottom)
-            if (favouritesId) {
-                const maxOrderResult = await transaction.request()
-                    .input('outletId', sql.Int, outletId)
-                    .query('SELECT ISNULL(MAX(DisplayOrder), -1) + 1 as MaxOrder FROM DishGroup WHERE OutletId = @outletId AND Name != \'Favourites\'');
-                
-                await transaction.request()
-                    .input('id', sql.Int, favouritesId)
-                    .input('order', sql.Int, maxOrderResult.recordset[0].MaxOrder)
                     .query('UPDATE DishGroup SET DisplayOrder = @order WHERE Id = @id');
             }
             

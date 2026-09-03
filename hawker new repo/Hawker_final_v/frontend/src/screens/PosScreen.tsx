@@ -344,7 +344,10 @@ const renderContentByLayer = ({
                         color: currentTheme.primary,
                         fontWeight: '500',
                       }}>
-                        {menuItems.filter((i: any) => i.displayCategory === cat).length} Items
+                        {cat === 'Favourites'
+                          ? menuItems.filter((i: any) => i.isFavourite === true).length
+                          : menuItems.filter((i: any) => i.displayCategory === cat || i.category === cat).length
+                        } Items
                       </Text>
                     </View>
                   </LinearGradient>
@@ -1706,16 +1709,21 @@ export default function PosScreen() {
       });
 
       setDishGroups(prev => {
-        const needsUpdate = prev.some(group =>
-          group.itemCount !== (newCounts[group.id?.toString()] || 0)
-        );
+        const needsUpdate = prev.some(group => {
+          const expectedCount = group.name === 'Favourites' 
+            ? favCount 
+            : (newCounts[group.id?.toString()] || 0);
+          return group.itemCount !== expectedCount;
+        });
 
         if (!needsUpdate) return prev;
 
-        console.log('📊 Updating category counts:', newCounts);
+        console.log('📊 Updating category counts:', newCounts, '⭐ Favourites:', favCount);
         return prev.map(group => ({
           ...group,
-          itemCount: newCounts[group.id?.toString()] || 0
+          itemCount: group.name === 'Favourites' 
+            ? favCount 
+            : (newCounts[group.id?.toString()] || 0)
         }));
       });
 
