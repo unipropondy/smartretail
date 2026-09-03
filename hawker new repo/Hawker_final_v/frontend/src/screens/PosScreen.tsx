@@ -4069,6 +4069,19 @@ export default function PosScreen() {
     });
   };
 
+  const handlePriceSubmit = () => {
+    if (!priceModal.item) return;
+
+    const price = parseFloat(priceModal.price);
+    if (isNaN(price) || price < 0) {
+      Alert.alert('Error', 'Please enter valid price');
+      return;
+    }
+
+    addToCart(priceModal.item, price);
+    setPriceModal({ visible: false, item: null, price: '' });  // ✅ Using priceModal
+  };
+
   const modalContent = useMemo(() => {
     if (!priceModal.visible) return null;
 
@@ -4177,21 +4190,6 @@ export default function PosScreen() {
     console.log('📢 MenuGrid - onOpenPriceItem prop:', !!handleOpenPriceItem);
   }, []);
 
-
-  // ✅ ADD THIS FUNCTION
-  // In PosScreen.tsx - Update this function
-  const handlePriceSubmit = () => {
-    if (!priceModal.item) return;
-
-    const price = parseFloat(priceModal.price);
-    if (isNaN(price) || price < 0) {
-      Alert.alert('Error', 'Please enter valid price');
-      return;
-    }
-
-    addToCart(priceModal.item, price);
-    setPriceModal({ visible: false, item: null, price: '' });  // ✅ Using priceModal
-  };
   const calculateTotalWithoutDiscount = (): string => {
     return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2);
   };

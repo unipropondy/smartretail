@@ -905,7 +905,7 @@ const resetForm = () => {
         </View>
 
         <ScrollView
-          style={{ maxHeight: '85%' }}
+          style={[{ maxHeight: '80vh' }, Platform.OS === 'web' && ({ overflowY: 'auto' } as any)]}
           showsVerticalScrollIndicator={true}
           nestedScrollEnabled={true}
           bounces={true}
@@ -1144,7 +1144,7 @@ const resetForm = () => {
         </View>
 
         <ScrollView
-          style={{ maxHeight: '85%' }}
+          style={[{ maxHeight: '80vh' }, Platform.OS === 'web' && ({ overflowY: 'auto' } as any)]}
           showsVerticalScrollIndicator={true}
           nestedScrollEnabled={true}
           bounces={true}
