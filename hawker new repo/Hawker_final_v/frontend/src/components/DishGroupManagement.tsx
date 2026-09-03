@@ -11,6 +11,7 @@ import {
   Alert,
   ActivityIndicator,
   Switch,
+  Platform,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,7 +30,7 @@ interface DishGroup {
   active: boolean;
   order?: number;
   isDynamic?: boolean;  // ✅ NEW: Mark dynamic groups like Favourites
-  departmentId?: number; 
+  departmentId?: number;
   departmentName?: string;
 }
 interface Department {
@@ -49,8 +50,8 @@ interface DishGroupManagementProps {
   onGroupUpdate: () => void;
   departments: Department[];
   selectedDepartmentId?: number;
-    onDepartmentChange?: (deptId: number) => void;
-    is3LayerMode: boolean; 
+  onDepartmentChange?: (deptId: number) => void;
+  is3LayerMode: boolean;
 }
 
 export const DishGroupManagement: React.FC<DishGroupManagementProps> = ({
@@ -63,9 +64,9 @@ export const DishGroupManagement: React.FC<DishGroupManagementProps> = ({
   t,
   onGroupUpdate,
 
-   departments = [],           // Add this
+  departments = [],           // Add this
   selectedDepartmentId,       // Add this
-  onDepartmentChange, 
+  onDepartmentChange,
   is3LayerMode,
 }) => {
   const [showAddGroup, setShowAddGroup] = useState(false);
@@ -75,45 +76,45 @@ export const DishGroupManagement: React.FC<DishGroupManagementProps> = ({
   const [formActive, setFormActive] = useState(true);
   const [loading, setLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-const [selectedDeptId, setSelectedDeptId] = useState<number | null>(selectedDepartmentId || null);
-const [filterDepartmentId, setFilterDepartmentId] = useState<number | null>(null);
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(selectedDepartmentId || null);
+  const [filterDepartmentId, setFilterDepartmentId] = useState<number | null>(null);
   // ✅ Filter groups for display (hide empty Favourites)
-const displayGroups = useMemo(() => {
+  const displayGroups = useMemo(() => {
     let groups = [...dishGroups];
-    
+
     // Filter by department
     if (filterDepartmentId) {
-        groups = groups.filter(g => g.departmentId === filterDepartmentId);
+      groups = groups.filter(g => g.departmentId === filterDepartmentId);
     }
-    
+
     // Hide empty Favourites
     return groups.filter(group => {
-        if (group.name === 'Favourites' && group.itemCount === 0 && group.isDynamic) {
-            return false;
-        }
-        return true;
+      if (group.name === 'Favourites' && group.itemCount === 0 && group.isDynamic) {
+        return false;
+      }
+      return true;
     });
-}, [dishGroups, filterDepartmentId]);
-// Add this after displayGroups or replace displayGroups
-const filteredGroups = useMemo(() => {
+  }, [dishGroups, filterDepartmentId]);
+  // Add this after displayGroups or replace displayGroups
+  const filteredGroups = useMemo(() => {
     console.log('🔍 Filtering - selected deptId:', filterDepartmentId);
     console.log('🔍 All groups with deptId:', dishGroups.map(g => ({ name: g.name, deptId: g.departmentId })));
-    
+
     let groups = [...dishGroups];
-    
+
     if (filterDepartmentId) {
-        groups = groups.filter(g => g.departmentId === filterDepartmentId);
-        console.log('🔍 Filtered groups:', groups.map(g => g.name));
+      groups = groups.filter(g => g.departmentId === filterDepartmentId);
+      console.log('🔍 Filtered groups:', groups.map(g => g.name));
     }
-    
+
     // Hide empty Favourites
     return groups.filter(group => {
-        if (group.name === 'Favourites' && group.itemCount === 0 && group.isDynamic) {
-            return false;
-        }
-        return true;
+      if (group.name === 'Favourites' && group.itemCount === 0 && group.isDynamic) {
+        return false;
+      }
+      return true;
     });
-}, [dishGroups, filterDepartmentId]);
+  }, [dishGroups, filterDepartmentId]);
   // Add Group - Prevent manual creation of Favourites
   const handleAddGroup = async (): Promise<void> => {
     console.log('📤 Sending group with departmentId:', selectedDeptId);  // ✅ Add debug
@@ -133,34 +134,34 @@ const filteredGroups = useMemo(() => {
       const response = await API.post('/dishgroups', {
         name: newGroupName.trim(),
         active: formActive,
-        departmentId: selectedDeptId || null 
+        departmentId: selectedDeptId || null
       });
-console.log('✅ Response:', response.data);
+      console.log('✅ Response:', response.data);
       const newGroup = {
         id: response.data.Id,
         name: response.data.Name,
         itemCount: 0,
         active: response.data.active ?? formActive,
         isDynamic: false,  // ✅ Manual groups are not dynamic
-         departmentId: selectedDeptId || null,  // ✅ Add this
+        departmentId: selectedDeptId || null,  // ✅ Add this
       };
 
       const updatedGroups = [...dishGroups, newGroup];
       setDishGroups(updatedGroups);
-      
+
       // ✅ Update categories (include Favourites only if it has items)
       const updatedCategories = updatedGroups
         .filter(g => g.active !== false && (g.name !== 'Favourites' || g.itemCount > 0))
         .map(g => g.name);
       setCategories(updatedCategories);
-      
+
       setNewGroupName('');
       setFormActive(true);
       setShowAddGroup(false);
-      
+
       await saveOrderToBackend(updatedGroups);
       onGroupUpdate();
-      
+
     } catch (error) {
       Alert.alert(t.error, 'Failed to add dish group');
     } finally {
@@ -170,7 +171,7 @@ console.log('✅ Response:', response.data);
 
   const handleEditGroup = async (): Promise<void> => {
     if (!editingGroup || !newGroupName.trim()) return;
-    
+
     // ✅ Prevent editing Favourites group name
     if (editingGroup.name === 'Favourites') {
       Alert.alert('Error', 'Favourites group cannot be edited');
@@ -180,18 +181,18 @@ console.log('✅ Response:', response.data);
     setLoading(true);
     try {
       const oldName = editingGroup.name;
-      
+
       await API.put(`/dishgroups/${editingGroup.id}`, {
         name: newGroupName.trim(),
         active: formActive,
-        departmentId: selectedDeptId || null 
+        departmentId: selectedDeptId || null
       });
 
       const updatedGroups = dishGroups.map(group =>
-    group.id === editingGroup.id
-        ? { ...group, name: newGroupName.trim(), active: formActive, departmentId: selectedDeptId || null }
-        : group
-);
+        group.id === editingGroup.id
+          ? { ...group, name: newGroupName.trim(), active: formActive, departmentId: selectedDeptId || null }
+          : group
+      );
       setDishGroups(updatedGroups);
 
       // ✅ Update categories (preserve Favourites if it has items)
@@ -208,9 +209,9 @@ console.log('✅ Response:', response.data);
       setNewGroupName('');
       setFormActive(true);
       setShowEditGroup(false);
-      
+
       onGroupUpdate();
-      
+
     } catch (error: any) {
       Alert.alert(t.error || '❌ Error', 'Failed to edit dish group');
     } finally {
@@ -224,28 +225,28 @@ console.log('✅ Response:', response.data);
       Alert.alert('Error', 'Favourites group cannot be deactivated');
       return;
     }
-    
+
     setLoading(true);
     try {
       const newActiveState = !group.active;
-      
+
       await API.put(`/dishgroups/${group.id}`, {
         name: group.name,
         active: newActiveState
       });
 
-const updatedGroups = dishGroups.map(g =>
-    g.id === group.id ? { ...g, active: newActiveState } : g
-);
-      
+      const updatedGroups = dishGroups.map(g =>
+        g.id === group.id ? { ...g, active: newActiveState } : g
+      );
+
       // ✅ Update categories display
       const updatedCategories = updatedGroups
         .filter(g => g.active !== false && (g.name !== 'Favourites' || g.itemCount > 0))
         .map(g => g.name);
       setCategories(updatedCategories);
-      
+
       onGroupUpdate();
-      
+
     } catch (error) {
       Alert.alert(t.error, 'Failed to update status');
     } finally {
@@ -259,7 +260,7 @@ const updatedGroups = dishGroups.map(g =>
       Alert.alert('Error', 'Favourites group cannot be deleted');
       return;
     }
-    
+
     Alert.alert(
       t.delete,
       `${t.confirmDelete} "${group.name}"? ${t.thisWillDelete}`,
@@ -287,7 +288,7 @@ const updatedGroups = dishGroups.map(g =>
 
               await saveOrderToBackend(updatedGroups);
               onGroupUpdate();
-              
+
             } catch (error) {
               Alert.alert(t.error, 'Failed to delete dish group');
             } finally {
@@ -298,13 +299,13 @@ const updatedGroups = dishGroups.map(g =>
       ]
     );
   };
-// Add this useEffect after state declarations
-useEffect(() => {
+  // Add this useEffect after state declarations
+  useEffect(() => {
     // When filter department changes, update selectedDeptId for new group
     if (filterDepartmentId) {
-        setSelectedDeptId(filterDepartmentId);
+      setSelectedDeptId(filterDepartmentId);
     }
-}, [filterDepartmentId]);
+  }, [filterDepartmentId]);
   const saveOrderToBackend = async (groups: DishGroup[]) => {
     try {
       const orderData = groups
@@ -312,9 +313,9 @@ useEffect(() => {
           id: group.id,
           order: index
         }));
-      
+
       await API.post('/dishgroups/update-order', { groups: orderData });
-      
+
     } catch (error) {
       console.log('❌ Failed to save order:', error);
     }
@@ -336,13 +337,13 @@ useEffect(() => {
     setEditingGroup(group);
     setNewGroupName(group.name);
     setFormActive(group.active);
-     setSelectedDeptId(group.departmentId || null); 
+    setSelectedDeptId(group.departmentId || null);
     setShowEditGroup(true);
   };
 
   const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<DishGroup>) => {
     const canDrag = true;
-    
+
     return (
       <ScaleDecorator>
         <TouchableOpacity
@@ -361,13 +362,13 @@ useEffect(() => {
           ]}
         >
           <View style={styles.groupInfo}>
-            <Ionicons 
-              name={item.name === 'Favourites' ? "star" : "menu"} 
-              size={24} 
-              color={item.name === 'Favourites' ? currentTheme.warning : (isActive ? currentTheme.primary : currentTheme.textSecondary)} 
+            <Ionicons
+              name={item.name === 'Favourites' ? "star" : "menu"}
+              size={24}
+              color={item.name === 'Favourites' ? currentTheme.warning : (isActive ? currentTheme.primary : currentTheme.textSecondary)}
               style={styles.dragIcon}
             />
-            
+
             <View style={styles.groupNameContainer}>
               <Text style={[styles.groupName, { color: currentTheme.text }]}>
                 {item.name} {item.name === 'Favourites' && '⭐'}
@@ -383,8 +384,8 @@ useEffect(() => {
             {item.name !== 'Favourites' && (
               <>
                 <TouchableOpacity
-                  style={[styles.actionBtn, { 
-                    backgroundColor: item.active ? currentTheme.success : currentTheme.inactive 
+                  style={[styles.actionBtn, {
+                    backgroundColor: item.active ? currentTheme.success : currentTheme.inactive
                   }]}
                   onPress={() => toggleActive(item)}
                   disabled={loading}
@@ -416,67 +417,67 @@ useEffect(() => {
   }, [currentTheme, loading, t]);
 
   return (
-     <GestureHandlerRootView style={{ flex: 1 }}>
-       <SafeAreaView style={{ flex: 1, backgroundColor: currentTheme.background }}>
-    <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
-          
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: currentTheme.background }}>
+        <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
+
           {/* Header Section */}
-         <View>
-    <Text style={[styles.title, { color: currentTheme.text }]}>
-        {t.dishGroupManagement}
-    </Text>
+          <View>
+            <Text style={[styles.title, { color: currentTheme.text }]}>
+              {t.dishGroupManagement}
+            </Text>
 
-    <Text style={[styles.dragHint, { color: currentTheme.textSecondary }]}>
-        👆 Long press and drag to reorder groups
-    </Text>
+            <Text style={[styles.dragHint, { color: currentTheme.textSecondary }]}>
+              👆 Long press and drag to reorder groups
+            </Text>
 
-    {/* ✅ ADD DEPARTMENT FILTER HERE */}
-    {is3LayerMode && departments && departments.length > 0 && (
-    <View style={styles.filterContainer}>
-        <Text style={[styles.filterLabel, { color: currentTheme.textSecondary }]}>
-            Filter by Department:
-        </Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <TouchableOpacity
-                style={[
-                    styles.filterChip,
-                    !filterDepartmentId && { backgroundColor: currentTheme.primary }
-                ]}
-                onPress={() => setFilterDepartmentId(null)}
-            >
-                <Text style={{ color: !filterDepartmentId ? '#fff' : currentTheme.text }}>
-                    All
+            {/* ✅ ADD DEPARTMENT FILTER HERE */}
+            {is3LayerMode && departments && departments.length > 0 && (
+              <View style={styles.filterContainer}>
+                <Text style={[styles.filterLabel, { color: currentTheme.textSecondary }]}>
+                  Filter by Department:
                 </Text>
-            </TouchableOpacity>
-            {departments.map(dept => (
-                <TouchableOpacity
-                    key={dept.Id}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <TouchableOpacity
                     style={[
+                      styles.filterChip,
+                      !filterDepartmentId && { backgroundColor: currentTheme.primary }
+                    ]}
+                    onPress={() => setFilterDepartmentId(null)}
+                  >
+                    <Text style={{ color: !filterDepartmentId ? '#fff' : currentTheme.text }}>
+                      All
+                    </Text>
+                  </TouchableOpacity>
+                  {departments.map(dept => (
+                    <TouchableOpacity
+                      key={dept.Id}
+                      style={[
                         styles.filterChip,
                         filterDepartmentId === dept.Id && { backgroundColor: currentTheme.primary }
-                    ]}
-                    onPress={() => setFilterDepartmentId(dept.Id)}
-                >
-                    <Text style={{ color: filterDepartmentId === dept.Id ? '#fff' : currentTheme.text }}>
+                      ]}
+                      onPress={() => setFilterDepartmentId(dept.Id)}
+                    >
+                      <Text style={{ color: filterDepartmentId === dept.Id ? '#fff' : currentTheme.text }}>
                         {dept.Name}
-                    </Text>
-                </TouchableOpacity>
-            ))}
-        </ScrollView>
-    </View>
-)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
 
-    <TouchableOpacity
-        style={[styles.addButton, { backgroundColor: currentTheme.secondary }]}
-        onPress={() => {
-            setFormActive(true);
-            setShowAddGroup(true);
-        }}
-        disabled={loading}
-    >
-        <Text style={styles.addButtonText}>{t.addNewGroup}</Text>
-    </TouchableOpacity>
-</View>
+            <TouchableOpacity
+              style={[styles.addButton, { backgroundColor: currentTheme.secondary }]}
+              onPress={() => {
+                setFormActive(true);
+                setShowAddGroup(true);
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.addButtonText}>{t.addNewGroup}</Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Loading Indicator */}
           {loading && (
@@ -486,13 +487,13 @@ useEffect(() => {
           )}
 
           {/* Draggable List */}
-          <View style={{ flex: 1, marginTop: 10 }}>
+          <View style={[{ flex: 1, marginTop: 10 }, Platform.OS === 'web' && ({ overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' } as any)]}>
             <DraggableFlatList
-             data={filteredGroups} 
+              data={filteredGroups}
               onDragEnd={handleDragEnd}
               keyExtractor={(item) => `group-${item.id}`}
               renderItem={renderItem}
-              contentContainerStyle={{ 
+              contentContainerStyle={{
                 paddingBottom: 20,
                 flexGrow: 1
               }}
@@ -511,233 +512,233 @@ useEffect(() => {
           </View>
 
           {/* Add Group Modal */}
-{/* Add Group Modal - Full Screen Scrollable */}
-<Modal visible={showAddGroup} animationType="slide" onRequestClose={() => setShowAddGroup(false)}>
-    <SafeAreaView style={{ flex: 1, backgroundColor: currentTheme.background }}>
-        {/* Header */}
-        <View style={[styles.fullScreenHeader, { backgroundColor: currentTheme.primary }]}>
-            <Text style={[styles.fullScreenTitle, { color: '#fff' }]}>{t.addNewGroup}</Text>
-            <TouchableOpacity onPress={() => setShowAddGroup(false)} style={styles.fullScreenClose}>
-                <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-        </View>
+          {/* Add Group Modal - Full Screen Scrollable */}
+          <Modal visible={showAddGroup} animationType="slide" onRequestClose={() => setShowAddGroup(false)}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: currentTheme.background }}>
+              {/* Header */}
+              <View style={[styles.fullScreenHeader, { backgroundColor: currentTheme.primary }]}>
+                <Text style={[styles.fullScreenTitle, { color: '#fff' }]}>{t.addNewGroup}</Text>
+                <TouchableOpacity onPress={() => setShowAddGroup(false)} style={styles.fullScreenClose}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
 
-        {/* Scrollable Content */}
-        <ScrollView 
-            style={{ flex: 1 }}
-            contentContainerStyle={styles.fullScreenFormContent}
-            showsVerticalScrollIndicator={true}
-            keyboardShouldPersistTaps="handled"
-        >
-            {/* Department Selector */}
-            {is3LayerMode && departments && departments.length > 0 && (
-                <View style={styles.formField}>
+              {/* Scrollable Content */}
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.fullScreenFormContent}
+                showsVerticalScrollIndicator={true}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* Department Selector */}
+                {is3LayerMode && departments && departments.length > 0 && (
+                  <View style={styles.formField}>
                     <Text style={[styles.formLabel, { color: currentTheme.textSecondary }]}>
-                        Department (Optional)
+                      Department (Optional)
                     </Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <TouchableOpacity
+                        style={[
+                          styles.deptChip,
+                          !selectedDeptId && { backgroundColor: currentTheme.primary }
+                        ]}
+                        onPress={() => setSelectedDeptId(null)}
+                      >
+                        <Text style={{ color: !selectedDeptId ? '#fff' : currentTheme.text }}>
+                          No Department
+                        </Text>
+                      </TouchableOpacity>
+                      {departments.map(dept => (
                         <TouchableOpacity
-                            style={[
-                                styles.deptChip,
-                                !selectedDeptId && { backgroundColor: currentTheme.primary }
-                            ]}
-                            onPress={() => setSelectedDeptId(null)}
+                          key={dept.Id}
+                          style={[
+                            styles.deptChip,
+                            selectedDeptId === dept.Id && { backgroundColor: currentTheme.primary }
+                          ]}
+                          onPress={() => {
+                            console.log('📂 Selected department:', dept.Id, dept.Name);
+                            setSelectedDeptId(dept.Id);
+                            if (onDepartmentChange) onDepartmentChange(dept.Id);
+                          }}
                         >
-                            <Text style={{ color: !selectedDeptId ? '#fff' : currentTheme.text }}>
-                                No Department
-                            </Text>
+                          <Text style={{ color: selectedDeptId === dept.Id ? '#fff' : currentTheme.text }}>
+                            {dept.Name}
+                          </Text>
                         </TouchableOpacity>
-                        {departments.map(dept => (
-                            <TouchableOpacity
-                                key={dept.Id}
-                                style={[
-                                    styles.deptChip,
-                                    selectedDeptId === dept.Id && { backgroundColor: currentTheme.primary }
-                                ]}
-                                onPress={() => {
-                                    console.log('📂 Selected department:', dept.Id, dept.Name);
-                                    setSelectedDeptId(dept.Id);
-                                    if (onDepartmentChange) onDepartmentChange(dept.Id);
-                                }}
-                            >
-                                <Text style={{ color: selectedDeptId === dept.Id ? '#fff' : currentTheme.text }}>
-                                    {dept.Name}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
+                      ))}
                     </ScrollView>
-                </View>
-            )}
+                  </View>
+                )}
 
-            {/* Group Name */}
-            <Text style={[styles.formLabel, { color: currentTheme.textSecondary }]}>Category Name *</Text>
-            <TextInput
-                style={[styles.formInput, {
+                {/* Group Name */}
+                <Text style={[styles.formLabel, { color: currentTheme.textSecondary }]}>Category Name *</Text>
+                <TextInput
+                  style={[styles.formInput, {
                     backgroundColor: currentTheme.surface,
                     borderColor: currentTheme.border,
                     color: currentTheme.text
-                }]}
-                placeholder="Enter Category name"
-                placeholderTextColor={currentTheme.textSecondary}
-                value={newGroupName}
-                onChangeText={setNewGroupName}
-                editable={!loading}
-            />
+                  }]}
+                  placeholder="Enter Category name"
+                  placeholderTextColor={currentTheme.textSecondary}
+                  value={newGroupName}
+                  onChangeText={setNewGroupName}
+                  editable={!loading}
+                />
 
-            {/* Active Switch */}
-            <View style={styles.activeRow}>
-                <Text style={[styles.activeLabel, { color: currentTheme.text }]}>Active</Text>
-                <Switch
+                {/* Active Switch */}
+                <View style={styles.activeRow}>
+                  <Text style={[styles.activeLabel, { color: currentTheme.text }]}>Active</Text>
+                  <Switch
                     value={formActive}
                     onValueChange={setFormActive}
                     trackColor={{ false: currentTheme.inactive, true: currentTheme.success }}
                     thumbColor="#fff"
-                />
-            </View>
+                  />
+                </View>
 
-            {/* Buttons */}
-            <View style={styles.formButtons}>
-                <TouchableOpacity
+                {/* Buttons */}
+                <View style={styles.formButtons}>
+                  <TouchableOpacity
                     style={[styles.formCancelBtn, { borderColor: currentTheme.border, backgroundColor: currentTheme.surface }]}
                     onPress={() => {
-                        setShowAddGroup(false);
-                        setNewGroupName('');
-                        setFormActive(true);
-                        setSelectedDeptId(filterDepartmentId || null);
+                      setShowAddGroup(false);
+                      setNewGroupName('');
+                      setFormActive(true);
+                      setSelectedDeptId(filterDepartmentId || null);
                     }}
                     disabled={loading}
-                >
+                  >
                     <Text style={[styles.formCancelText, { color: currentTheme.text }]}>Cancel</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
                     style={[styles.formSaveBtn, { backgroundColor: currentTheme.primary }]}
                     onPress={handleAddGroup}
                     disabled={loading}
-                >
+                  >
                     {loading ? <ActivityIndicator size="small" color="#fff" /> :
-                        <Text style={styles.formSaveText}>Save</Text>}
-                </TouchableOpacity>
-            </View>
-            
-            <View style={{ height: 30 }} />
-        </ScrollView>
-    </SafeAreaView>
-</Modal>
-          {/* Edit Group Modal */}
-         {/* Edit Group Modal - Full Screen Scrollable */}
-<Modal visible={showEditGroup} animationType="slide" onRequestClose={() => setShowEditGroup(false)}>
-    <SafeAreaView style={{ flex: 1, backgroundColor: currentTheme.background }}>
-        {/* Header */}
-        <View style={[styles.fullScreenHeader, { backgroundColor: currentTheme.primary }]}>
-            <Text style={[styles.fullScreenTitle, { color: '#fff' }]}>{t.edit}</Text>
-            <TouchableOpacity onPress={() => setShowEditGroup(false)} style={styles.fullScreenClose}>
-                <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-        </View>
+                      <Text style={styles.formSaveText}>Save</Text>}
+                  </TouchableOpacity>
+                </View>
 
-        {/* Scrollable Content */}
-        <ScrollView 
-            style={{ flex: 1 }}
-            contentContainerStyle={styles.fullScreenFormContent}
-            showsVerticalScrollIndicator={true}
-            keyboardShouldPersistTaps="handled"
-        >
-            {/* Department Selector */}
-            {is3LayerMode && departments && departments.length > 0 && (
-                <View style={styles.formField}>
+                <View style={{ height: 30 }} />
+              </ScrollView>
+            </SafeAreaView>
+          </Modal>
+          {/* Edit Group Modal */}
+          {/* Edit Group Modal - Full Screen Scrollable */}
+          <Modal visible={showEditGroup} animationType="slide" onRequestClose={() => setShowEditGroup(false)}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: currentTheme.background }}>
+              {/* Header */}
+              <View style={[styles.fullScreenHeader, { backgroundColor: currentTheme.primary }]}>
+                <Text style={[styles.fullScreenTitle, { color: '#fff' }]}>{t.edit}</Text>
+                <TouchableOpacity onPress={() => setShowEditGroup(false)} style={styles.fullScreenClose}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Scrollable Content */}
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.fullScreenFormContent}
+                showsVerticalScrollIndicator={true}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* Department Selector */}
+                {is3LayerMode && departments && departments.length > 0 && (
+                  <View style={styles.formField}>
                     <Text style={[styles.formLabel, { color: currentTheme.textSecondary }]}>
-                        Department
+                      Department
                     </Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <TouchableOpacity
+                        style={[
+                          styles.deptChip,
+                          !selectedDeptId && { backgroundColor: currentTheme.primary }
+                        ]}
+                        onPress={() => setSelectedDeptId(null)}
+                      >
+                        <Text style={{ color: !selectedDeptId ? '#fff' : currentTheme.text }}>
+                          No Department
+                        </Text>
+                      </TouchableOpacity>
+                      {departments.map(dept => (
                         <TouchableOpacity
-                            style={[
-                                styles.deptChip,
-                                !selectedDeptId && { backgroundColor: currentTheme.primary }
-                            ]}
-                            onPress={() => setSelectedDeptId(null)}
+                          key={dept.Id}
+                          style={[
+                            styles.deptChip,
+                            selectedDeptId === dept.Id && { backgroundColor: currentTheme.primary }
+                          ]}
+                          onPress={() => {
+                            console.log('📂 Selected department:', dept.Id, dept.Name);
+                            setSelectedDeptId(dept.Id);
+                            if (onDepartmentChange) onDepartmentChange(dept.Id);
+                          }}
                         >
-                            <Text style={{ color: !selectedDeptId ? '#fff' : currentTheme.text }}>
-                                No Department
-                            </Text>
+                          <Text style={{ color: selectedDeptId === dept.Id ? '#fff' : currentTheme.text }}>
+                            {dept.Name}
+                          </Text>
                         </TouchableOpacity>
-                        {departments.map(dept => (
-                            <TouchableOpacity
-                                key={dept.Id}
-                                style={[
-                                    styles.deptChip,
-                                    selectedDeptId === dept.Id && { backgroundColor: currentTheme.primary }
-                                ]}
-                                onPress={() => {
-                                    console.log('📂 Selected department:', dept.Id, dept.Name);
-                                    setSelectedDeptId(dept.Id);
-                                    if (onDepartmentChange) onDepartmentChange(dept.Id);
-                                }}
-                            >
-                                <Text style={{ color: selectedDeptId === dept.Id ? '#fff' : currentTheme.text }}>
-                                    {dept.Name}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
+                      ))}
                     </ScrollView>
-                </View>
-            )}
+                  </View>
+                )}
 
-            {/* Group Name */}
-            <Text style={[styles.formLabel, { color: currentTheme.textSecondary }]}>Category Name *</Text>
-            <TextInput
-                style={[styles.formInput, {
+                {/* Group Name */}
+                <Text style={[styles.formLabel, { color: currentTheme.textSecondary }]}>Category Name *</Text>
+                <TextInput
+                  style={[styles.formInput, {
                     backgroundColor: currentTheme.surface,
                     borderColor: currentTheme.border,
                     color: currentTheme.text
-                }]}
-                placeholder="Enter Category name"
-                placeholderTextColor={currentTheme.textSecondary}
-                value={newGroupName}
-                onChangeText={setNewGroupName}
-                editable={!loading}
-            />
+                  }]}
+                  placeholder="Enter Category name"
+                  placeholderTextColor={currentTheme.textSecondary}
+                  value={newGroupName}
+                  onChangeText={setNewGroupName}
+                  editable={!loading}
+                />
 
-            {/* Active Switch */}
-            <View style={styles.activeRow}>
-                <Text style={[styles.activeLabel, { color: currentTheme.text }]}>Active</Text>
-                <Switch
+                {/* Active Switch */}
+                <View style={styles.activeRow}>
+                  <Text style={[styles.activeLabel, { color: currentTheme.text }]}>Active</Text>
+                  <Switch
                     value={formActive}
                     onValueChange={setFormActive}
                     trackColor={{ false: currentTheme.inactive, true: currentTheme.success }}
                     thumbColor="#fff"
-                />
-            </View>
+                  />
+                </View>
 
-            {/* Buttons */}
-            <View style={styles.formButtons}>
-                <TouchableOpacity
+                {/* Buttons */}
+                <View style={styles.formButtons}>
+                  <TouchableOpacity
                     style={[styles.formCancelBtn, { borderColor: currentTheme.border, backgroundColor: currentTheme.surface }]}
                     onPress={() => {
-                        setShowEditGroup(false);
-                        setEditingGroup(null);
-                        setNewGroupName('');
-                        setFormActive(true);
+                      setShowEditGroup(false);
+                      setEditingGroup(null);
+                      setNewGroupName('');
+                      setFormActive(true);
                     }}
                     disabled={loading}
-                >
+                  >
                     <Text style={[styles.formCancelText, { color: currentTheme.text }]}>Cancel</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
                     style={[styles.formSaveBtn, { backgroundColor: currentTheme.primary }]}
                     onPress={handleEditGroup}
                     disabled={loading}
-                >
+                  >
                     {loading ? <ActivityIndicator size="small" color="#fff" /> :
-                        <Text style={styles.formSaveText}>Update</Text>}
-                </TouchableOpacity>
-            </View>
-            
-            <View style={{ height: 30 }} />
-        </ScrollView>
-    </SafeAreaView>
-</Modal>
+                      <Text style={styles.formSaveText}>Update</Text>}
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ height: 30 }} />
+              </ScrollView>
+            </SafeAreaView>
+          </Modal>
         </View>
       </SafeAreaView>
     </GestureHandlerRootView>
@@ -745,35 +746,35 @@ useEffect(() => {
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    padding: 16 
+  container: {
+    flex: 1,
+    padding: 16
   },
-  title: { 
-    fontSize: 18, 
-    fontWeight: '700', 
-    marginBottom: 8, 
-    includeFontPadding: false 
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+    includeFontPadding: false
   },
-  dragHint: { 
-    fontSize: 12, 
-    marginBottom: 12, 
+  dragHint: {
+    fontSize: 12,
+    marginBottom: 12,
     fontStyle: 'italic',
-    includeFontPadding: false 
+    includeFontPadding: false
   },
-  addButton: { 
-    padding: 14, 
-    borderRadius: 10, 
-    alignItems: 'center', 
-    marginBottom: 16, 
-    minHeight: 50, 
-    justifyContent: 'center' 
+  addButton: {
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 16,
+    minHeight: 50,
+    justifyContent: 'center'
   },
-  addButtonText: { 
-    color: '#ffffff', 
-    fontSize: 15, 
-    fontWeight: '600', 
-    includeFontPadding: false 
+  addButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+    includeFontPadding: false
   },
   loadingContainer: {
     position: 'absolute',
@@ -782,13 +783,13 @@ const styles = StyleSheet.create({
     transform: [{ translateX: -15 }, { translateY: -15 }],
     zIndex: 1000,
   },
-  groupCard: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: 12, 
-    borderRadius: 10, 
-    marginBottom: 8, 
+  groupCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
     borderWidth: 1,
     minHeight: 70,
   },
@@ -796,7 +797,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 193, 7, 0.1)',
     borderColor: '#FFC107',
   },
-  groupInfo: { 
+  groupInfo: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -835,19 +836,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-  groupName: { 
-    fontSize: 15, 
-    fontWeight: '600', 
+  groupName: {
+    fontSize: 15,
+    fontWeight: '600',
     marginBottom: 2,
-    includeFontPadding: false 
+    includeFontPadding: false
   },
-  groupCount: { 
+  groupCount: {
     fontSize: 12,
-    includeFontPadding: false 
+    includeFontPadding: false
   },
-  groupActions: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  groupActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
   actionBtn: {
@@ -862,55 +863,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalOverlay: { 
-    flex: 1, 
-    backgroundColor: 'rgba(0,0,0,0.5)', 
-    justifyContent: 'center', 
-    padding: 16 
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 16
   },
-  modalContent: { 
-    borderRadius: 16, 
-    padding: 20 
+  modalContent: {
+    borderRadius: 16,
+    padding: 20
   },
   filterContainer: {
     marginBottom: 16,
     marginTop: 8,
-},
-filterLabel: {
+  },
+  filterLabel: {
     fontSize: 12,
     marginBottom: 8,
     fontWeight: '500',
-},
-filterScroll: {
+  },
+  filterScroll: {
     flexDirection: 'row',
     marginBottom: 8,
-},
-filterChip: {
+  },
+  filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     marginRight: 8,
     borderWidth: 1,
     borderColor: 'transparent',
-},
-filterChipText: {
+  },
+  filterChipText: {
     fontSize: 13,
     fontWeight: '500',
-},
-  modalTitle: { 
-    fontSize: 18, 
-    fontWeight: '700', 
-    marginBottom: 16, 
-    textAlign: 'center', 
-    includeFontPadding: false 
   },
-  modalInput: { 
-    borderWidth: 1, 
-    borderRadius: 8, 
-    padding: 12, 
-    fontSize: 14, 
-    marginBottom: 16, 
-    minHeight: 50 
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+    includeFontPadding: false
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    marginBottom: 16,
+    minHeight: 50
   },
   activeRow: {
     flexDirection: 'row',
@@ -922,36 +923,36 @@ filterChipText: {
     fontSize: 16,
     fontWeight: '500',
   },
-  modalButtons: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginTop: 8 
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8
   },
-  modalBtn: { 
-    flex: 1, 
-    paddingVertical: 12, 
-    borderRadius: 8, 
-    alignItems: 'center', 
-    marginHorizontal: 4, 
-    minHeight: 48, 
-    justifyContent: 'center' 
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 4,
+    minHeight: 48,
+    justifyContent: 'center'
   },
-  cancelBtn: { 
-    borderWidth: 1 
+  cancelBtn: {
+    borderWidth: 1
   },
-  cancelBtnText: { 
-    fontSize: 14, 
-    fontWeight: '600', 
-    includeFontPadding: false 
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    includeFontPadding: false
   },
-  saveBtn: { 
-    backgroundColor: '#4CAF50' 
+  saveBtn: {
+    backgroundColor: '#4CAF50'
   },
-  saveBtnText: { 
-    color: '#ffffff', 
-    fontSize: 14, 
-    fontWeight: '600', 
-    includeFontPadding: false 
+  saveBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    includeFontPadding: false
   },
   fullScreenHeader: {
     flexDirection: 'row',
@@ -959,64 +960,64 @@ filterChipText: {
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
-},
-fullScreenTitle: {
+  },
+  fullScreenTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#fff',
-},
-fullScreenClose: {
+  },
+  fullScreenClose: {
     padding: 5,
-},
-fullScreenFormContent: {
+  },
+  fullScreenFormContent: {
     padding: 20,
     paddingBottom: 40,
-},
-deptChip: {
+  },
+  deptChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     marginRight: 8,
     borderWidth: 1,
     borderColor: 'transparent',
-},
+  },
 
-formInput: {
+  formInput: {
     borderWidth: 1,
     borderRadius: 10,
     padding: 14,
     fontSize: 15,
     marginBottom: 20,
-},
+  },
 
 
-formButtons: {
+  formButtons: {
     flexDirection: 'row',
     gap: 12,
     marginTop: 10,
-},
-formCancelBtn: {
+  },
+  formCancelBtn: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 10,
     borderWidth: 1,
     alignItems: 'center',
-},
-formCancelText: {
+  },
+  formCancelText: {
     fontSize: 16,
     fontWeight: '600',
-},
-formSaveBtn: {
+  },
+  formSaveBtn: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
-},
-formSaveText: {
+  },
+  formSaveText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-},
+  },
 });
 
 export default DishGroupManagement;
